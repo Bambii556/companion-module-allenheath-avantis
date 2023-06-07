@@ -1,5 +1,3 @@
-import AvantisInstance from './index'
-
 export interface Choice {
     name: string
     offset: number
