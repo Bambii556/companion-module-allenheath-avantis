@@ -1,0 +1,33 @@
+{
+	"extends": "./node_modules/@companion-module/tools/eslint/main.cjs",
+	"overrides": [
+		{
+			"files": ["*.ts"],
+			"parser": "@typescript-eslint/parser",
+			"parserOptions": { "project": "./tsconfig.json" },
+			"plugins": ["@typescript-eslint"],
+			"extends": [
+				"eslint:recommended",
+				"plugin:@typescript-eslint/eslint-recommended",
+				"plugin:@typescript-eslint/recommended",
+				"prettier"
+			],
+			"rules": {
+				"@typescript-eslint/no-empty-function": 0,
+				"prettier/prettier": [
+					"warn",
+					{
+						"endOfLine": "auto",
+						"useTabs": "auto"
+					}
+				]
+			}
+		},
+		{
+			"files": ["test/**/*.ts"],
+			"env": {
+				"jest": true
+			}
+		}
+	]
+}
