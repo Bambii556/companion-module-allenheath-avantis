@@ -8,7 +8,7 @@ import { getFeedbackDefinitions } from "./feedback";
 import { Config, getConfigDefinitions } from './config'
 import { Choices, getChoices } from "./choices";
 import { getSceneSelection, Scene } from "./scenes";
-import { AvantisConfig, getAvantisConfig, getNameByHex, getNameHexByName, NameChars } from "./avantisConfig";
+import { AvantisConfig, getAvantisConfig, getNameByHex, getNameHexByName } from "./avantisConfig";
 import { TCP } from "./tcp";
 import { Cache } from './types';
 
