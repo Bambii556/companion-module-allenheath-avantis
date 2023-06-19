@@ -1,4 +1,5 @@
 import { InstanceStatus, TCPHelper as tcp, TCPHelper } from '@companion-module/base'
+import { Config } from './config'
 import AvantisInstance from './index'
 
 export class TCP {
@@ -8,9 +9,9 @@ export class TCP {
   private tcpPort: number
   public isConnected: boolean = false
 
-  constructor(instance: AvantisInstance) {
+  constructor(instance: AvantisInstance, config: Config) {
     this.instance = instance
-    this.tcpHost = instance.config.host
+    this.tcpHost = config.host
     this.tcpPort = 51325
   }
 
@@ -27,7 +28,7 @@ export class TCP {
   /**
    * @description Create a TCP connection to vMix and start API polling
    */
-  public init(): void {
+  public init(connectCallback: () => void): void {
     if (!this.tcpHost) {
       this.instance.log(
         'warn',
@@ -38,10 +39,11 @@ export class TCP {
 
     this.destroy();
 
+    this.instance.updateStatus(InstanceStatus.Connecting)
     this.tcpSocket = new tcp(this.tcpHost, this.tcpPort)
 
     this.tcpSocket.on('status_change', (status, message) => {
-      if (message) this.instance.log('debug', message)
+      if (message) this.instance.log('debug', `TCP Status: (${status}) ${message}`)
 
       if (status === 'ok') {
         this.isConnected = true
@@ -59,18 +61,28 @@ export class TCP {
     })
 
     this.tcpSocket.on('error', (err: Error) => {
-      this.instance.log('error', err.message)
+      this.instance.log('error', `TCP Error: ${err.message}`)
       this.instance.updateStatus(InstanceStatus.UnknownError)
     })
 
     this.tcpSocket.on('connect', () => {
-      this.instance.log('debug', 'Connected Function Socket')
+      this.instance.log('debug', 'TCP Connect: Connected Function Socket')
+      connectCallback();
     })
 
-    this.tcpSocket.on('data', (data: Buffer) => {
-      const message = data.toString().split(/\r?\n/)
-      this.instance.log('debug', `Command Response: ${message}`)
-      this.instance.validateTCPFeedback(data);
+    this.tcpSocket.on('data', (msg: Buffer) => {
+      if (!msg) {
+        return;
+      }
+
+      const data = JSON.parse(JSON.stringify(msg))['data'] as number[];
+      const result = {
+        data: data,
+        hex: data.map(x => x.toString(16))
+      };
+      this.instance.log('debug', `TCP Data: ${JSON.stringify(result)}`)
+
+      this.instance.validateTCPFeedback(result);
     })
   }
 

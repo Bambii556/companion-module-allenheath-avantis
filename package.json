@@ -2,7 +2,6 @@
 	"name": "allenheath-avantis",
 	"version": "1.0.1",
 	"api_version": "1.1.0",
-	"type": "module",
 	"main": "dist/index.js",
 	"scripts": {
 		"dev": "yarn build:watch",

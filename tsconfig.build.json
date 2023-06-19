@@ -9,7 +9,7 @@
 			"*": ["./node_modules/*"]
 		},
 		"noImplicitAny": false,
-		"module": "commonjs",
+		"types": ["node"],
 		"esModuleInterop": true
 	}
 }

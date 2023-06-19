@@ -1,44 +1,53 @@
+import { AvantisConfig } from "./avantisConfig";
+
 export interface Scene {
-    sceneNumber: number;
-    block: number;
+    sceneId: number;
+    bank: number;
     ss: number;
 }
 
-export function getSceneSelection(avantisData: any): Scene[] {
+export function getSceneSelection(avantisConfig: AvantisConfig): Scene[] {
     const scenes: Scene[] = []
 
-    for (let i = 1; i <= avantisData.config.sceneCount; i++) {
-        scenes.push({
-            sceneNumber: i,
-            block: getSceneBank(i),
+    for (let i = 1; i <= avantisConfig.config.sceneCount; i++) {
+        const scene = {
+            sceneId: i,
+            bank: getSceneBank(i),
             ss: getSceneSSNumber(i),
-        })
+        };
+
+        // TODO: Remove once tested
+        if (i === 1 || i === 129 || i === 257 || i === 385 || i === 65 || i === 193 || i === 321 || i === 449 || i === 500) {
+            console.log(JSON.stringify(scene))
+        }
+
+        scenes.push(scene);
     }
 
     return scenes;
 }
 
-function getSceneBank(sceneNumber: number): number {
-    if (sceneNumber <= 128) {
+function getSceneBank(sceneId: number): number {
+    if (sceneId <= 128) {
         return 0x00
     }
 
-    if (sceneNumber <= 256) {
+    if (sceneId <= 256) {
         return 0x01
     }
 
-    if (sceneNumber <= 384) {
+    if (sceneId <= 384) {
         return 0x02
     }
 
     return 0x03
 }
 
-function getSceneSSNumber(sceneNumber: number): number {
-    if (sceneNumber > 128) {
+function getSceneSSNumber(sceneId: number): number {
+    if (sceneId > 128) {
         do {
-            sceneNumber -= 128
-        } while (sceneNumber > 128)
+            sceneId -= 128
+        } while (sceneId > 128)
     }
-    return sceneNumber - 1
+    return sceneId - 1
 }
