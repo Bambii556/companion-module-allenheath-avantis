@@ -6,6 +6,7 @@ import {
 } from '@companion-module/base'
 import AvantisInstance from './index'
 import { Choice, Choices } from "./choices";
+import { ChannelType } from './utils';
 
 /**
  * Returns all implemented actions.
@@ -20,69 +21,82 @@ export function getActionDefinitions(self: AvantisInstance, choices: Choices): C
 	actions['mute_input'] = muteActionBuilder(
 		self,
 		'Mute Input',
-		choices.inputChannel)
+		choices.inputChannel,
+		ChannelType.Input)
 
 	actions['mute_master'] = muteActionBuilder(
 		self,
 		'Mute Main',
-		choices.mainMix)
+		choices.mainMix,
+		ChannelType.Main)
 
 	actions['mute_mono_group'] = muteActionBuilder(
 		self,
 		'Mute Mono Group',
-		choices.monoGroup)
+		choices.monoGroup,
+		ChannelType.MonoGroup)
 
 	actions['mute_stereo_group'] = muteActionBuilder(
 		self,
 		'Mute Stereo Group',
-		choices.stereoGroup)
+		choices.stereoGroup,
+		ChannelType.StereoGroup)
 
 	actions['mute_mono_aux'] = muteActionBuilder(
 		self,
 		'Mute Mono Aux',
-		choices.monoAux)
+		choices.monoAux,
+		ChannelType.MonoAux)
 
 	actions['mute_stereo_aux'] = muteActionBuilder(
 		self,
 		'Mute Stereo Aux',
-		choices.stereoAux)
+		choices.stereoAux,
+		ChannelType.StereoAux)
 
 	actions['mute_mono_matrix'] = muteActionBuilder(
 		self,
 		'Mute Mono Matrix',
-		choices.monoMatrix)
+		choices.monoMatrix,
+		ChannelType.MonoMatrix)
 
 	actions['mute_stereo_matrix'] = muteActionBuilder(
 		self,
 		'Mute Stereo Matrix',
-		choices.stereoMatrix)
+		choices.stereoMatrix,
+		ChannelType.StereoMatrix)
 
 	// TODO: Can i mute a Mono FX Send
 	actions['mute_mono_fx_send'] = muteActionBuilder(
 		self,
 		'Mute Mono FX Send',
-		choices.monoFXSend)
+		choices.monoFXSend,
+		ChannelType.MonoFXSend)
 
 	// TODO: Can i mute a Mono FX Send
 	actions['mute_stereo_fx_send'] = muteActionBuilder(
 		self,
 		'Mute Stereo FX Send',
-		choices.stereoFXSend)
+		choices.stereoFXSend,
+		ChannelType.StereoFXSend)
 
 	actions['mute_fx_return'] = muteActionBuilder(
 		self,
 		'Mute FX Return',
-		choices.FXReturn)
+		choices.FXReturn,
+		ChannelType.FXReturn)
 
 	actions['mute_group'] = muteActionBuilder(
 		self,
 		'Mute Group',
-		choices.muteGroup)
+		choices.muteGroup,
+		ChannelType.Group)
 
 	actions['mute_dca'] = muteActionBuilder(
 		self,
 		'Mute DCA',
-		choices.dca)
+		choices.dca,
+		ChannelType.DCA)
 
 	actions['fader_input'] = faderActionBuilder(
 		self,
@@ -317,7 +331,8 @@ export function getActionDefinitions(self: AvantisInstance, choices: Choices): C
 function muteActionBuilder(
 	self: AvantisInstance,
 	name: string,
-	choice: Choice
+	choice: Choice,
+	type: ChannelType
 ): CompanionActionDefinition {
 	return {
 		name: name,
@@ -340,7 +355,9 @@ function muteActionBuilder(
 		callback: async (action: CompanionActionEvent) => {
 			const { channel, mute } = action.options as { channel: number, mute: boolean };
 			await self.sendMuteCommand(channel, mute, choice.midiOffset);
-			self.cache.mute.input[`${channel}}`] = mute;
+			// self.cache.mute.input[`${channel}`] = mute;
+			// self.checkFeedbacks('mute_input');
+			self.setMuteValue(type, channel, mute);
 		},
 	}
 }

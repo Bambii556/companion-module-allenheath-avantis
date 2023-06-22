@@ -1,3 +1,14 @@
+import { ChannelType } from "./utils";
+
+export type MainCache = {
+    mute: CacheMuteOption;
+    name: NameOption;
+}
+
+export type CacheMuteOption = {
+    [id in ChannelType]: MuteOption;
+}
+
 export interface Cache {
     mute: MuteCache;
     name: NameOption;

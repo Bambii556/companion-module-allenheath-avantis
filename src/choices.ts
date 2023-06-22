@@ -3,6 +3,7 @@ import { AvantisConfig, Color, Fader } from "./avantisConfig"
 export interface Choice {
     name: string
     midiOffset: number
+    hexOffset: number
     values: ChoiceValue[]
 }
 
@@ -97,6 +98,7 @@ function buildChoices(name: string, key: string, qty: number, { hexOffset, midiO
     const choice: Choice = {
         name: name,
         midiOffset: midiOffset,
+        hexOffset: hexOffset,
         values: [],
     }
     for (let i = 1; i <= qty; i++) {
@@ -106,6 +108,7 @@ function buildChoices(name: string, key: string, qty: number, { hexOffset, midiO
             hexOffset
         })
     }
+    // console.log(`${key}: ${JSON.stringify(choice)}`)
     return choice
 }
 
@@ -113,6 +116,7 @@ function buildColorChoices(colorOptions: Color[]): Choice {
     return {
         name: `Color`,
         midiOffset: 0,
+        hexOffset: 0,
         values: colorOptions.map(c => ({
             label: c.key,
             id: c.value,
@@ -125,6 +129,7 @@ function buildFaderChoices(faderOptions: Fader[]): Choice {
     return {
         name: `Fader Level`,
         midiOffset: 0,
+        hexOffset: 0,
         values: faderOptions.map(fdr => ({
             label: `${fdr.db} dB`,
             id: fdr.hex,

@@ -7,12 +7,16 @@ export class TCP {
   private tcpSocket!: TCPHelper
   private tcpHost: string
   private tcpPort: number
+  // private getRemoteStates: () => Promise<void>;
+  // private validateTCPFeedback: (result: { data: number[], hex: string[] }) => void;
   public isConnected: boolean = false
 
   constructor(instance: AvantisInstance, config: Config) {
     this.instance = instance
     this.tcpHost = config.host
     this.tcpPort = 51325
+    // this.getRemoteStates = instance.getRemoteStates;
+    // this.validateTCPFeedback = instance.validateTCPFeedback;
   }
 
   /**
@@ -28,7 +32,7 @@ export class TCP {
   /**
    * @description Create a TCP connection to vMix and start API polling
    */
-  public init(connectCallback: () => void): void {
+  public init(getRemoteStates: () => void, validateTCPFeedback: (data: number[]) => void): void {
     if (!this.tcpHost) {
       this.instance.log(
         'warn',
@@ -65,10 +69,7 @@ export class TCP {
       this.instance.updateStatus(InstanceStatus.UnknownError)
     })
 
-    this.tcpSocket.on('connect', () => {
-      this.instance.log('debug', 'TCP Connect: Connected Function Socket')
-      connectCallback();
-    })
+    this.tcpSocket.on('connect', getRemoteStates)
 
     this.tcpSocket.on('data', (msg: Buffer) => {
       if (!msg) {
@@ -76,13 +77,8 @@ export class TCP {
       }
 
       const data = JSON.parse(JSON.stringify(msg))['data'] as number[];
-      const result = {
-        data: data,
-        hex: data.map(x => x.toString(16))
-      };
-      this.instance.log('debug', `TCP Data: ${JSON.stringify(result)}`)
 
-      this.instance.validateTCPFeedback(result);
+      validateTCPFeedback(data);
     })
   }
 
@@ -109,10 +105,12 @@ export class TCP {
   async sendCommand(command: Buffer): Promise<boolean> {
     try {
       if (this.tcpSocket && this.tcpSocket.isConnected) {
-        this.instance.log('debug', `sending '${command.toString('hex')}' ${command.length}`)
+        this.instance.log('debug', `sending '${command.toString('hex')}' => length: ${command.length}`)
 
         const response = await this.tcpSocket.send(command);
         return response;
+
+        // return true;
       }
     } catch (error) {
       this.instance.log('error', `Failed sending command: ${(error as Error).message}`)

@@ -269,14 +269,15 @@ export function getAvantisConfig(): AvantisConfig {
 	return config;
 }
 
-export function getNameByHex(config: AvantisConfig, hexValues: string[]): string {
+export function getNameByHex(config: AvantisConfig, values: number[]): string {
 	const chars: string[] = [];
-	for (const hex of hexValues) {
+	for (const value of values) {
 		if (chars.length >= 8) {
 			break;
 		}
 
-		const char = config.name.hex[hex.toUpperCase()];
+		const hex = value.toString(16).toUpperCase();
+		const char = config.name.hex[`0x${hex}`];
 
 		if (char) {
 			chars.push(char);

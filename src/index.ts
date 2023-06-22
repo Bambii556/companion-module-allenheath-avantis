@@ -10,7 +10,8 @@ import { Choices, getChoices } from "./choices";
 import { getSceneSelection, Scene } from "./scenes";
 import { AvantisConfig, getAvantisConfig, getNameByHex, getNameHexByName } from "./avantisConfig";
 import { TCP } from "./tcp";
-import { Cache } from './types';
+import { MainCache } from './types';
+import { ChannelType, determineChannelType } from './utils';
 
 const SysExHeader = [0xf0, 0x00, 0x00, 0x1a, 0x50, 0x10, 0x01, 0x00]
 
@@ -28,7 +29,7 @@ class AvantisInstance extends InstanceBase<Config> {
 	scenes!: Scene[]
 	choices!: Choices
 	avantisConfig!: AvantisConfig
-	cache!: Cache
+	cache!: MainCache
 
 	/**
 	 * Create an instance.
@@ -40,6 +41,25 @@ class AvantisInstance extends InstanceBase<Config> {
 	 */
 	constructor(internal: unknown) {
 		super(internal)
+		this.cache = {
+			mute: {
+				dca: {},
+				FXReturn: {},
+				group: {},
+				input: {},
+				main: {},
+				monoAux: {},
+				monoFXSend: {},
+				monoGroup: {},
+				monoMatrix: {},
+				stereoAux: {},
+				stereoFXSend: {},
+				stereoGroup: {},
+				stereoMatrix: {}
+			},
+			name: {
+			}
+		}
 	}
 
 	/**
@@ -58,8 +78,11 @@ class AvantisInstance extends InstanceBase<Config> {
 		this.scenes = getSceneSelection(this.avantisConfig)
 		this.choices = getChoices(this.avantisConfig);
 
+		this.log('debug', `Loading Config files`);
 		this.setActionDefinitions(getActionDefinitions(this, this.choices))
 		this.setFeedbackDefinitions(getFeedbackDefinitions(this, this.choices))
+
+		this.log('debug', `Init Done`);
 	}
 
 	/**
@@ -91,6 +114,7 @@ class AvantisInstance extends InstanceBase<Config> {
 			return;
 		}
 
+		// await new Promise(f => setTimeout(f, 1000));
 		this.init_tcp()
 	}
 
@@ -106,7 +130,7 @@ class AvantisInstance extends InstanceBase<Config> {
 		}
 
 		this.log('debug', `Initializing TCP Socket`);
-		this.tcpSocket.init(this.getRemoteStates);
+		this.tcpSocket.init(this.getRemoteStates, this.validateTCPFeedback);
 	}
 
 	/**
@@ -128,7 +152,9 @@ class AvantisInstance extends InstanceBase<Config> {
 		let midi = this.getMidiValue(midiOffset);
 
 		// 9N, CH, 7F(3F), 9N, CH, 00
-		const command = Buffer.from([0x90 + midi, channel, mute ? 0x7f : 0x3f, 0x90 + midi, channel, 0x00])
+		const data = [0x90 + midi, channel, mute ? 0x7f : 0x3f, 0x90 + midi, channel, 0x00];
+		this.log('warn', `Sending Mute: ${JSON.stringify({ data, hex: data.map(x => x.toString(16)) })}`)
+		const command = Buffer.from(data)
 
 		await this.tcpSocket.sendCommand(command);
 	}
@@ -278,186 +304,98 @@ class AvantisInstance extends InstanceBase<Config> {
 		await this.tcpSocket.sendCommand(command);
 	}
 
-	public validateTCPFeedback(result: { data: number[], hex: string[] }) {
-		if (!result || !result.data || result.data.length <= 0) {
+	public validateTCPFeedback = (data: number[]) => {
+
+		this.log('debug', `TCP Data: ${JSON.stringify(data)}`)
+		if (!data || data.length <= 0) {
 			return
 		}
 
+		let firstValue = data[0];
+
 		// Mute Feedback
-		let firstHex = parseInt(result.hex[0], 16);
-
-		if (firstHex >= 0x90 && firstHex <= 0xa6) {
-			this.updateMuteStateInCach(result.hex);
+		if (firstValue >= 144 && firstValue <= 166) {
+			this.updateMuteStateInCach(data);
 			return;
 		}
 
-		if (firstHex >= 0xb0 && firstHex <= 0xc6) {
-			this.updateOtherChanges(result.hex, firstHex);
+		if (firstValue >= 176 && firstValue <= 198) {
+			this.updateOtherChanges(data);
 			return;
 		}
 
-		this.updateSystemChanges(result.hex);
+		this.updateSystemChanges(data);
 	}
 
-	private updateMuteStateInCach(hex: string[]) {
-		// TODO: Check if feedback is returned when we set a channel to mute, else remove set cache from action callback
+	private updateMuteStateInCach(data: number[]) {
 		// TODO: Check what happens if there are multiple mutes enabled at the same time, does it use running status codes
 
 		// Mutes On(Off)	 	=> 9N, CH, 7F(3F), 9N, CH, 00
 		// Hex Str	=> ["90","32","7f","32","0"]
 
-		const midiOffset = parseInt(hex[0], 16) - 0x90 - this.baseMidiChannel;
-		const mute = hex[2] === '7f' ? true : false;
-		const channel = hex[1];
+		const midiOffset = data[0] - 0x90 - this.baseMidiChannel;
+		const mute = data[2] === 127 ? true : false;
+		const channel = data[1];
 
 		console.log(`Mute Details: ${JSON.stringify({
-			hex,
+			data,
 			baseMidiChannel: this.baseMidiChannel,
 			midiOffset,
-			channel
-		})}`)
+			channel,
+			mute
+		})}`);
 
-		const channelType = this.determineChannelType(midiOffset, parseInt(hex[1], 16));
+		const channelType = determineChannelType(data[1], midiOffset);
 
-		switch (channelType) {
-			case 'input':
-				this.cache.mute.input[channel] = mute;
-				this.checkFeedbacks('mute_input');
-				break;
-
-			case 'monoGroup':
-				this.cache.mute.monoGroup[channel] = mute;
-				this.checkFeedbacks('mute_monoGroup');
-				break;
-
-			case 'stereoGroup':
-				this.cache.mute.stereoGroup[channel] = mute;
-				this.checkFeedbacks('mute_stereoGroup');
-				break;
-
-			case 'monoAux':
-				this.cache.mute.monoAux[channel] = mute;
-				this.checkFeedbacks('mute_monoAux');
-				break;
-
-			case 'stereoAux':
-				this.cache.mute.stereoAux[channel] = mute;
-				this.checkFeedbacks('mute_stereoAux');
-				break;
-
-			case 'monoMatrix':
-				this.cache.mute.monoMatrix[channel] = mute;
-				this.checkFeedbacks('mute_monoMatrix');
-				break;
-
-			case 'stereoMatrix':
-				this.cache.mute.stereoMatrix[channel] = mute;
-				this.checkFeedbacks('mute_stereoMatrix');
-				break;
-
-			case 'monoFXSend':
-				this.cache.mute.monoFXSend[channel] = mute;
-				this.checkFeedbacks('mute_monoFXSend');
-				break;
-
-			case 'stereoFXSend':
-				this.cache.mute.stereoFXSend[channel] = mute;
-				this.checkFeedbacks('mute_stereoFXSend');
-				break;
-
-			case 'FXReturn':
-				this.cache.mute.FXReturn[channel] = mute;
-				this.checkFeedbacks('mute_FXReturn');
-				break;
-
-			case 'main':
-				this.cache.mute.main[channel] = mute;
-				this.checkFeedbacks('mute_main');
-				break;
-
-			case 'dca':
-				this.cache.mute.dca[channel] = mute;
-				this.checkFeedbacks('mute_dca');
-				break;
-
-			case 'group':
-				this.cache.mute.group[channel] = mute;
-				this.checkFeedbacks('mute_group');
-				break;
-		}
+		this.setMuteValue(channelType, channel, mute);
 	}
 
-	private updateOtherChanges(hex: string[], firstHex: number) {
+	public setMuteValue(type: ChannelType, channel: number, mute: boolean) {
+		this.log('debug', `Setting channel in cache '${type}:${channel}' => ${mute}`)
+		this.cache.mute[type][channel] = mute;
+		this.checkFeedbacks(`mute_${type}`);
+	}
+
+	private updateOtherChanges(data: number[]) {
 		// Fader Levels 		=> BN, 63, CH, BN, 62, 17, BN, 06, LV
 		// Ch>Main Assign 		=> BN, 63, CH, BN, 62, 18, BN, 06, 7F(3F)
 		// DCA Assign On(Off) 	=> BN, 63, CH, BN, 62, 40, BN, 06, DB(DA)
 		// Mute Grp Assign 		=> BN, 63, CH, BN, 62, 40, BN, 06, DB(DA)
 		// Scene Recall 		=> BN, 00, Bank, CN, SS
 
-		const midiOffset = firstHex - this.baseMidiChannel;
+		// const midiOffset = firstHex - this.baseMidiChannel;
+		console.log(JSON.stringify({ data }))
 	}
 
-	private updateSystemChanges(hex: string[]) {
+	private updateSystemChanges(data: number[]) {
 		// Aux/FX/Mtx Sends 	=> SysEx Header, 0N , 0D, CH, SndN, SndCH, LV, F7
 		// Ch Name Reply… 		=> SysEx Header, 0N, 02, CH, Name, F7
 		// Ch Colour Reply… 	=> SysEx Header, 0N, 05, CH, Col, F7
 
-		const values = hex.slice(SysExHeader.length - 1, hex.length - 1);
+		const values = data.slice(SysExHeader.length, data.length - 1);
+		this.log('info', `Sys Data: ${JSON.stringify({
+			hex: data.map(x => x.toString(16)),
+			result: values.map(x => x.toString(16))
+		})}`)
 
 		// TODO: this should get the 0N field
-		const midiOffset = parseInt(values[0], 16) - this.baseMidiChannel;
-		const type = parseInt(values[1], 16);
-		const channel = parseInt(values[2], 16);
+		// const midiOffset = parseInt(values[0], 16) - this.baseMidiChannel;
+		const type = values[1];
+		const channel = values[2];
 
-
-		if (type === 0x02) {	// Ch Name Reply…
-			let endFlagIndx = values.indexOf('0xf7');
+		this.log('debug', `Sys Type: ${type}`)
+		if (type === 2) {	// Ch Name Reply…
+			let endFlagIndx = values.indexOf(247); // '0xf7'
 			// Add name to cache
 			this.cache.name[`${channel}`] = getNameByHex(this.avantisConfig, values.slice(0, endFlagIndx));
+			this.log('info', `Name Cache: ${JSON.stringify(this.cache.name)}`)
 
 		} else if (type === 0x05) {	// Ch Colour Reply… 
 
 		}
 	}
 
-	private determineChannelType(midiOffset: number, channelHex: number): string {
-		switch (midiOffset) {
-			case 0:
-				return 'input';
-			case 1:
-				if (channelHex <= 0x27) {
-					return 'monoGroup';
-				}
-				return 'stereoGroup';
-			case 2:
-				if (channelHex <= 0x27) {
-					return 'monoAux';
-				}
-				return 'stereoAux';
-			case 3:
-				if (channelHex <= 0x27) {
-					return 'monoMatrix';
-				}
-				return 'stereoMatrix';
-			case 4:
-				if (channelHex <= 0x0B) {
-					return 'monoFXSend';
-				} else if (channelHex <= 0x1b) {
-					return 'stereoFXSend';
-				} else if (channelHex <= 0x2b) {
-					return 'FXReturn';
-				} else if (channelHex <= 0x32) {
-					return 'main';
-				} else if (channelHex <= 0x45) {
-					return 'dca';
-				}
-				return 'group';
-		}
-
-		return '';
-	}
-
-	public async getRemoteStates() {
+	public getRemoteStates = async () => {
 		this.log('debug', 'Getting Device States on Connected Status')
 		// TODO: Check when setting state does it trigger a response message to update cache also
 
@@ -474,8 +412,17 @@ class AvantisInstance extends InstanceBase<Config> {
 		// await this.tcpSocket.sendCommands(commands);
 
 		// Test Mute Send for Channel 00 with NOTE OFF flag to check if we can get a response back??
-		const command = Buffer.from([0x90, 0x00, 0x00, 0x90, 0x00, 0x00])
-		await this.tcpSocket.sendCommand(Buffer.from(command));
+		// SysEx Header, 0N, 01, CH, F7
+		const nameCommands: Buffer[] = []
+		for (const val of this.choices.inputChannel.values) {
+			const command = Buffer.from([...SysExHeader, 0x00, val.id, 0x00, 0xf7]);
+			nameCommands.push(command)
+		}
+		await this.tcpSocket.sendCommands(nameCommands);
+		// const command1 = Buffer.from([...SysExHeader, 0x00, 0x01, 0x00, 0xf7]);
+		// await this.tcpSocket.sendCommand(command1);
+		// this.checkFeedbacks('mute_input');
+		// this.checkFeedbacks('mute_input');
 
 		//TODO: find out how to get the active Mute channels
 	}

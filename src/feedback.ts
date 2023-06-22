@@ -44,7 +44,7 @@ function buildMuteFeedback(self: AvantisInstance, choice: Choice, name: string, 
                 label: choice.name,
                 id: 'channel',
                 choices: choice.values,
-                default: 1 + choice.offset,
+                default: choice.values[0].id,
                 minChoicesForSearch: 0,
             },
         ],
@@ -56,9 +56,16 @@ function buildMuteFeedback(self: AvantisInstance, choice: Choice, name: string, 
 
 function getMuteCacheValue(cache: Cache, type: CacheTypes, channel: string) {
     if (!cache || !cache.mute || !cache.mute[type]) {
+        console.log(`Feedback Error: ${JSON.stringify({ type, cahce: cache.mute })}`)
         return false;
     }
-    const value = cache.mute.input[`${channel}`];
+    const value = cache.mute[type][`${channel}`];
+    console.log(`Feedback data: ${JSON.stringify({
+        type,
+        channel,
+        value,
+        cache: cache.mute[type]
+    })}`)
     if (value === undefined) {
         return false;
     }
