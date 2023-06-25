@@ -2,7 +2,7 @@ import { InstanceBase, runEntrypoint, SomeCompanionConfigField } from '@companio
 import { getActionDefinitions } from './actions'
 import { getFeedbackDefinitions } from './feedback'
 import { Config, getConfigDefinitions } from './config'
-import { Choices, getChoices } from './choices'
+import { Choice, Choices, getChoices } from './choices'
 import { getSceneSelection, Scene } from './scenes'
 import { AvantisConfig, getAvantisConfig, getColorByNumber, getNameByHex, getNameHexByName } from './avantisConfig'
 import { TCP } from './tcp'
@@ -52,8 +52,36 @@ class AvantisInstance extends InstanceBase<Config> {
 				stereoGroup: {},
 				stereoMatrix: {},
 			},
-			name: {},
-			color: {},
+			name: {
+				dca: {},
+				FXReturn: {},
+				group: {},
+				input: {},
+				main: {},
+				monoAux: {},
+				monoFXSend: {},
+				monoGroup: {},
+				monoMatrix: {},
+				stereoAux: {},
+				stereoFXSend: {},
+				stereoGroup: {},
+				stereoMatrix: {},
+			},
+			color: {
+				dca: {},
+				FXReturn: {},
+				group: {},
+				input: {},
+				main: {},
+				monoAux: {},
+				monoFXSend: {},
+				monoGroup: {},
+				monoMatrix: {},
+				stereoAux: {},
+				stereoFXSend: {},
+				stereoGroup: {},
+				stereoMatrix: {},
+			},
 		}
 	}
 
@@ -293,7 +321,7 @@ class AvantisInstance extends InstanceBase<Config> {
 
 		// Mute Feedback
 		if (firstValue >= 144 && firstValue <= 166) {
-			this.updateMuteStateInCach(data)
+			this.updateMuteStateInCache(data)
 			return
 		}
 
@@ -307,29 +335,33 @@ class AvantisInstance extends InstanceBase<Config> {
 		}
 	}
 
-	private updateMuteStateInCach(data: number[]) {
-		// TODO: Check what happens if there are multiple mutes enabled at the same time, does it use running status codes
-
+	private updateMuteStateInCache(data: number[]) {
 		// Mutes On(Off)	 	=> 9N, CH, 7F(3F), 9N, CH, 00
 		// Hex Str	=> ["90","32","7f","32","0"]
-
+		let startIndex = 1
 		const midiOffset = data[0] - 0x90 - this.baseMidiChannel
-		const mute = data[2] === 127 ? true : false
-		const channel = data[1]
 
-		console.log(
-			`Mute Details: ${JSON.stringify({
-				data,
-				baseMidiChannel: this.baseMidiChannel,
-				midiOffset,
-				channel,
-				mute,
-			})}`
-		)
+		do {
+			let values = data.slice(startIndex)
+			const mute = values[1] === 127 ? true : false
+			const channel = values[0]
 
-		const channelType = determineChannelType(data[1], midiOffset)
+			const channelType = determineChannelType(channel, midiOffset)
+			this.setMuteValue(channelType, channel, mute)
 
-		this.setMuteValue(channelType, channel, mute)
+			startIndex += 4
+
+			console.log(
+				`Mute Details: ${JSON.stringify({
+					data,
+					baseMidiChannel: this.baseMidiChannel,
+					midiOffset,
+					channel,
+					mute,
+					startIndex,
+				})}`
+			)
+		} while (startIndex < data.length)
 	}
 
 	public setMuteValue(type: ChannelType, channel: number, mute: boolean) {
@@ -346,55 +378,48 @@ class AvantisInstance extends InstanceBase<Config> {
 		// Scene Recall 		=> BN, 00, Bank, CN, SS
 
 		// const midiOffset = firstHex - this.baseMidiChannel;
-		console.log(JSON.stringify({ data }))
+		this.log('debug', `Other Changes: ${JSON.stringify({ data })}`)
 	}
 
 	private updateSystemChanges(data: number[]) {
-		// Aux/FX/Mtx Sends 	=> SysEx Header, 0N , 0D, CH, SndN, SndCH, LV, F7
-
-		// const midiOffset = data[SysExHeader.length] - this.baseMidiChannel;
 		const type = data[SysExHeader.length + 1] // SysExHeader + 2
 
 		this.log('debug', `Sys Type: ${type}`)
 		if (type === 2) {
-			this.updateNameChanges(data)
+			this.loopRunningChanges(data, (values, channel, channelType) => {
+				// Ch Name Reply… 	=> SysEx Header, 0N, 02, CH, Name, F7
+				const name = getNameByHex(this.avantisConfig.name, values.slice(3))
+				this.cache.name[channelType][`${channel}`] = name
+				this.log('debug', `${channelType}:${channel} => ${name}`)
+			})
 		} else if (type === 5) {
-			this.updateColorChanges(data)
+			this.loopRunningChanges(data, (values, channel, channelType) => {
+				// Ch Colour Reply… 	=> SysEx Header, 0N, 05, CH, Col, F7
+				const color = getColorByNumber(this.avantisConfig, values[3])
+				this.cache.color[channelType][`${channel}`] = color as string
+			})
+		} else if (type === 13) {
+			// Aux/FX/Mtx Sends 	=> SysEx Header, 0N , 0D, CH, SndN, SndCH, LV, F7
 		}
 	}
 
-	private updateNameChanges(data: number[]) {
+	private loopRunningChanges(
+		data: number[],
+		action: (values: number[], channel: number, channelType: ChannelType) => void
+	) {
 		// Ch Name Reply… 	=> SysEx Header, 0N, 02, CH, Name, F7
 		let endFlagIndx = data.indexOf(247) // '0xf7'
 		let startIndex = 0
 		do {
 			// Includes all data except for the ending flag
 			const values = data.slice(startIndex + SysExHeader.length, endFlagIndx)
-			// const midiOffset = values[0] - this.baseMidiChannel
 			const channel = values[2]
 
-			// Add name to cache
-			const name = getNameByHex(this.avantisConfig.name, values.slice(3))
-			this.cache.name[`${channel}`] = name
-
-			startIndex = endFlagIndx + 1
-			endFlagIndx = data.indexOf(247, endFlagIndx + 1) // '0xf7'
-		} while (endFlagIndx != -1)
-	}
-
-	private updateColorChanges(data: number[]) {
-		// Ch Colour Reply… 	=> SysEx Header, 0N, 05, CH, Col, F7
-		let endFlagIndx = data.indexOf(247) // '0xf7'
-		let startIndex = 0
-		do {
-			// Includes all data except for the ending flag
-			const values = data.slice(startIndex + SysExHeader.length, endFlagIndx)
-			// const midiOffset = values[0] - this.baseMidiChannel
-			const channel = values[2]
+			const midiOffset = values[0] - this.baseMidiChannel
+			const channelType = determineChannelType(channel, midiOffset)
 
 			// Add name to cache
-			const color = getColorByNumber(this.avantisConfig, values[3])
-			this.cache.color[`${channel}`] = color as string
+			action(values, channel, channelType)
 
 			startIndex = endFlagIndx + 1
 			endFlagIndx = data.indexOf(247, endFlagIndx + 1) // '0xf7'
@@ -405,14 +430,33 @@ class AvantisInstance extends InstanceBase<Config> {
 		this.log('debug', 'Getting Device States on Connected Status')
 		// TODO: Check when setting state does it trigger a response message to update cache also
 
-		// - Name Send		SysEx Header, 0N, 01, CH, F7
-		const nameCommands: Buffer[] = []
-		for (const val of this.choices.inputChannel.values) {
-			const command = Buffer.from([...SysExHeader, 0x00, 0x01, val.id, 0xf7])
-			nameCommands.push(command)
-		}
-		await this.tcpSocket.sendCommands(nameCommands)
+		await this.getRemoteChannelNames()
+		await this.getRemoteChannelColors()
 
+		//TODO: find out how to get the active Mute channels
+	}
+
+	private async getRemoteChannelNames() {
+		// - Name Send		SysEx Header, 0N, 01, CH, F7
+		// const nameCommands: Buffer[] = []
+		// for (const val of this.choices.inputChannel.values) {
+		// 	const command = Buffer.from([...SysExHeader, 0x00, 0x01, val.id, 0xf7])
+		// 	nameCommands.push(command)
+		// }
+		// await this.tcpSocket.sendCommands(nameCommands)
+
+		await this.sendDetailsCommand(0x01, this.choices.inputChannel)
+		await this.sendDetailsCommand(0x01, this.choices.monoAux)
+		await this.sendDetailsCommand(0x01, this.choices.stereoAux)
+
+		// let command: number[] = []
+		// for (const val of this.choices.inputChannel.values) {
+		// 	command.push(...[...SysExHeader, 0x00, 0x01, val.id, 0xf7])
+		// }
+		// await this.tcpSocket.sendCommand(Buffer.from(command))
+	}
+
+	private async getRemoteChannelColors() {
 		// Color Send		SysEx Header, 0N, 04, CH, F7
 		const colorCommands: Buffer[] = []
 		for (const val of this.choices.inputChannel.values) {
@@ -421,7 +465,15 @@ class AvantisInstance extends InstanceBase<Config> {
 		}
 		await this.tcpSocket.sendCommands(colorCommands)
 
-		//TODO: find out how to get the active Mute channels
+		// await this.sendDetailsCommand(0x04, this.choices.inputChannel)
+	}
+
+	private async sendDetailsCommand(commandCode: number, choice: Choice) {
+		let command: number[] = []
+		for (const val of choice.values) {
+			command.push(...[...SysExHeader, 0x00 + choice.midiOffset, commandCode, val.id, 0xf7])
+		}
+		await this.tcpSocket.sendCommand(Buffer.from(command))
 	}
 }
 
