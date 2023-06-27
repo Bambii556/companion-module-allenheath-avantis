@@ -1,5 +1,5 @@
 export interface AvantisConfig {
-	config: ConfigDetail
+	channel: ChannelConfig
 	name: NameDetails
 	faders: Fader[]
 	colors: Color[]
@@ -25,50 +25,212 @@ export interface NameChars {
 	[key: string]: string
 }
 
-export interface ConfigDetail {
-	mono: {
-		groupCount: number
-		auxCount: number
-		matrixCount: number
-		fxSendCount: number
+export interface ChannelDetail {
+	count: number
+	name: string
+	key: string
+	offset: ChannelOffsets
+}
+
+interface ChannelOffsets {
+	hex: number
+	midi: number
+}
+
+export interface ChannelConfig {
+	monoGroup: ChannelDetail
+	monoAux: ChannelDetail
+	monoMatrix: ChannelDetail
+	monoFXSend: ChannelDetail
+	stereoGroup: ChannelDetail
+	stereoAux: ChannelDetail
+	stereoMatrix: ChannelDetail
+	stereoFXSend: ChannelDetail
+	input: ChannelDetail
+	main: ChannelDetail
+	fxReturn: ChannelDetail
+	muteGroup: ChannelDetail
+	muteGroupAssign: {
+		on: ChannelDetail
+		off: ChannelDetail
 	}
-	stereo: {
-		groupCount: number
-		auxCount: number
-		matrixCount: number
-		fxSendCount: number
+	dca: ChannelDetail
+	dcaAssign: {
+		on: ChannelDetail
+		off: ChannelDetail
 	}
-	inputCount: number
-	mainsCount: number
-	fxReturnCount: number
-	muteGroupCount: number
-	dcaCount: number
-	dcaAssignCount: number
-	sceneCount: number
+	scene: ChannelDetail
 }
 
 export function getAvantisConfig(): AvantisConfig {
 	const config: AvantisConfig = {
-		config: {
-			mono: {
-				groupCount: 40,
-				auxCount: 40,
-				matrixCount: 40,
-				fxSendCount: 12,
+		channel: {
+			monoGroup: {
+				count: 40,
+				key: 'Group',
+				name: 'Mute Group',
+				offset: {
+					midi: 1,
+					hex: -1,
+				},
 			},
-			stereo: {
-				groupCount: 20,
-				auxCount: 20,
-				matrixCount: 20,
-				fxSendCount: 12,
+			monoAux: {
+				count: 40,
+				key: 'Mono Aux',
+				name: 'Mono Aux',
+				offset: {
+					midi: 2,
+					hex: -1,
+				},
 			},
-			inputCount: 64,
-			mainsCount: 3,
-			fxReturnCount: 12,
-			muteGroupCount: 8,
-			dcaCount: 16,
-			dcaAssignCount: 16,
-			sceneCount: 500,
+			monoMatrix: {
+				count: 40,
+				key: 'Mono Matrix',
+				name: 'Mono Matrix',
+				offset: {
+					midi: 3,
+					hex: -1,
+				},
+			},
+			monoFXSend: {
+				count: 12,
+				key: 'Mono FX Send',
+				name: 'Mono FX Send',
+				offset: {
+					midi: 4,
+					hex: -1,
+				},
+			},
+			stereoGroup: {
+				count: 20,
+				key: 'Stereo Group',
+				name: 'Stereo Group',
+				offset: {
+					midi: 1,
+					hex: 0x3f,
+				},
+			},
+			stereoAux: {
+				count: 20,
+				key: 'Stereo Aux',
+				name: 'Stereo Aux',
+				offset: {
+					midi: 2,
+					hex: 0x3f,
+				},
+			},
+			stereoMatrix: {
+				count: 20,
+				key: 'Stereo Matrix',
+				name: 'Stereo Matrix',
+				offset: {
+					midi: 3,
+					hex: 0x3f,
+				},
+			},
+			stereoFXSend: {
+				count: 12,
+				key: 'Stereo FX Send',
+				name: 'Stereo FX Send',
+				offset: {
+					midi: 4,
+					hex: 0x0f,
+				},
+			},
+			input: {
+				count: 64,
+				key: 'CH',
+				name: 'Input Channel',
+				offset: {
+					midi: 0,
+					hex: -1,
+				},
+			},
+			main: {
+				count: 3,
+				key: 'Main',
+				name: 'Main Mix',
+				offset: {
+					midi: 4,
+					hex: 0x2f,
+				},
+			},
+			fxReturn: {
+				count: 12,
+				key: 'FX Return',
+				name: 'FX Return',
+				offset: {
+					midi: 4,
+					hex: 0x1f,
+				},
+			},
+			muteGroup: {
+				count: 8,
+				key: 'Group',
+				name: 'Mute Group',
+				offset: {
+					midi: 4,
+					hex: 0x45,
+				},
+			},
+			muteGroupAssign: {
+				on: {
+					count: 8,
+					key: 'Mute Group Assign ON',
+					name: 'Mute Group Assign ON',
+					offset: {
+						midi: 4,
+						hex: 0x0f,
+					},
+				},
+				off: {
+					count: 8,
+					key: 'Mute Group Assign OFF',
+					name: 'Mute Group Assign OFF',
+					offset: {
+						midi: 4,
+						hex: 0x4f,
+					},
+				},
+			},
+			dca: {
+				count: 16,
+				key: 'DCA',
+				name: 'DCA',
+				offset: {
+					midi: 4,
+					hex: 0x35,
+				},
+			},
+			dcaAssign: {
+				on: {
+					count: 16,
+					key: 'DCA Assign ON',
+					name: 'DCA Assign ON',
+					offset: {
+						midi: 4,
+						hex: -1,
+					},
+				},
+				off: {
+					count: 16,
+					key: 'DCA Assign OFF',
+					name: 'DCA Assign OFF',
+					offset: {
+						midi: 4,
+						hex: 0x3f,
+					},
+				},
+			},
+			scene: {
+				count: 500,
+				key: 'Scene',
+				name: 'Scene',
+				offset: {
+					midi: 0,
+					hex: 0,
+				},
+			},
 		},
 		name: {
 			char: {
@@ -257,6 +419,7 @@ export function getAvantisConfig(): AvantisConfig {
 		],
 	}
 
+	// Invert the keys and values of 'Name' for faster lookups
 	for (const key in config.name.char) {
 		if (Object.prototype.hasOwnProperty.call(config.name.char, key)) {
 			const value = config.name.char[key]

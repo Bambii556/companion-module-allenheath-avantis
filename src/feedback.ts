@@ -1,52 +1,33 @@
 import { CompanionFeedbackDefinition, CompanionFeedbackDefinitions, combineRgb } from '@companion-module/base'
-import { Choice, Choices } from './choices'
 import AvantisInstance from './index'
-import { MainCache } from './types'
+import { Cache, CHANNEL_TYPE, ChannelType } from './types'
 
-type CacheTypes =
-	| 'input'
-	| 'main'
-	| 'monoGroup'
-	| 'stereoGroup'
-	| 'monoAux'
-	| 'stereoAux'
-	| 'monoMatrix'
-	| 'stereoMatrix'
-	| 'monoFXSend'
-	| 'stereoFXSend'
-	| 'FXReturn'
-	| 'group'
-	| 'dca'
-
-export function getFeedbackDefinitions(self: AvantisInstance, choices: Choices): CompanionFeedbackDefinitions {
+export function getFeedbackDefinitions(self: AvantisInstance): CompanionFeedbackDefinitions {
 	const feedbacks: { [id: string]: CompanionFeedbackDefinition | undefined } = {}
 
-	feedbacks['mute_input'] = buildMuteFeedback(self, choices.inputChannel, 'Input Channel', 'input')
-	feedbacks['mute_main'] = buildMuteFeedback(self, choices.mainMix, 'Main Channel', 'main')
-	feedbacks['mute_monoGroup'] = buildMuteFeedback(self, choices.monoGroup, 'Mono Group', 'monoGroup')
-	feedbacks['mute_stereoGroup'] = buildMuteFeedback(self, choices.stereoGroup, 'Stereo Group', 'stereoGroup')
-	feedbacks['mute_monoAux'] = buildMuteFeedback(self, choices.monoAux, 'Mono Aux', 'monoAux')
-	feedbacks['mute_stereoAux'] = buildMuteFeedback(self, choices.stereoAux, 'Stereo Aux', 'stereoAux')
-	feedbacks['mute_monoMatrix'] = buildMuteFeedback(self, choices.monoMatrix, 'Mono Matrix', 'monoMatrix')
-	feedbacks['mute_stereoMatrix'] = buildMuteFeedback(self, choices.stereoMatrix, 'Stereo Matrix', 'stereoMatrix')
-	feedbacks['mute_monoFXSend'] = buildMuteFeedback(self, choices.monoFXSend, 'Mono FX Send', 'monoFXSend')
-	feedbacks['mute_stereoFXSend'] = buildMuteFeedback(self, choices.stereoFXSend, 'Stereo FX Send', 'stereoFXSend')
-	feedbacks['mute_FXReturn'] = buildMuteFeedback(self, choices.FXReturn, 'FX Return', 'FXReturn')
-	feedbacks['mute_group'] = buildMuteFeedback(self, choices.muteGroup, 'Mute Group', 'group')
-	feedbacks['mute_dca'] = buildMuteFeedback(self, choices.dca, 'DCA', 'dca')
+	feedbacks[`mute_${CHANNEL_TYPE.Input}`] = buildMuteFeedback(self, CHANNEL_TYPE.Input)
+	feedbacks[`mute_${CHANNEL_TYPE.Main}`] = buildMuteFeedback(self, CHANNEL_TYPE.Main)
+	feedbacks[`mute_${CHANNEL_TYPE.MonoGroup}`] = buildMuteFeedback(self, CHANNEL_TYPE.MonoGroup)
+	feedbacks[`mute_${CHANNEL_TYPE.StereoGroup}`] = buildMuteFeedback(self, CHANNEL_TYPE.StereoGroup)
+	feedbacks[`mute_${CHANNEL_TYPE.MonoAux}`] = buildMuteFeedback(self, CHANNEL_TYPE.MonoAux)
+	feedbacks[`mute_${CHANNEL_TYPE.StereoAux}`] = buildMuteFeedback(self, CHANNEL_TYPE.StereoAux)
+	feedbacks[`mute_${CHANNEL_TYPE.MonoMatrix}`] = buildMuteFeedback(self, CHANNEL_TYPE.MonoMatrix)
+	feedbacks[`mute_${CHANNEL_TYPE.StereoMatrix}`] = buildMuteFeedback(self, CHANNEL_TYPE.StereoMatrix)
+	feedbacks[`mute_${CHANNEL_TYPE.MonoFXSend}`] = buildMuteFeedback(self, CHANNEL_TYPE.MonoFXSend)
+	feedbacks[`mute_${CHANNEL_TYPE.StereoFXSend}`] = buildMuteFeedback(self, CHANNEL_TYPE.StereoFXSend)
+	feedbacks[`mute_${CHANNEL_TYPE.FXReturn}`] = buildMuteFeedback(self, CHANNEL_TYPE.FXReturn)
+	feedbacks[`mute_${CHANNEL_TYPE.MuteGroup}`] = buildMuteFeedback(self, CHANNEL_TYPE.MuteGroup)
+	feedbacks[`mute_${CHANNEL_TYPE.DCA}`] = buildMuteFeedback(self, CHANNEL_TYPE.DCA)
 
 	return feedbacks
 }
 
-function buildMuteFeedback(
-	self: AvantisInstance,
-	choice: Choice,
-	name: string,
-	type: CacheTypes
-): CompanionFeedbackDefinition {
+function buildMuteFeedback(self: AvantisInstance, type: ChannelType): CompanionFeedbackDefinition {
+	const choice = self.choices[type]
+	const config = self.avantisConfig.channel[type]
 	return {
 		type: 'boolean',
-		name: `${name} Mute State`,
+		name: `${config.name} Mute State`,
 		description: 'Check the mute state of the selected channels',
 		defaultStyle: {
 			color: combineRgb(255, 255, 255),
@@ -63,23 +44,22 @@ function buildMuteFeedback(
 			},
 		],
 		callback: (feedback) => {
-			return getMuteCacheValue(self.cache, type, feedback.options.channel as string)
+			return getMuteCachedValue(self.cache, type, feedback.options.channel as string)
 		},
 	}
 }
 
-function getMuteCacheValue(cache: MainCache, type: CacheTypes, channel: string) {
-	if (!cache || !cache.mute || !cache.mute[type]) {
-		console.log(`Feedback Error: ${JSON.stringify({ type, cahce: cache.mute })}`)
+function getMuteCachedValue(cache: Cache, type: ChannelType, channel: string) {
+	if (!cache || !cache.channel || !cache.channel[type] || !cache.channel[type].mute) {
 		return false
 	}
-	const value = cache.mute[type][`${channel}`]
+	const value = cache.channel[type].mute[`${channel}`]
 	console.log(
 		`Feedback data: ${JSON.stringify({
 			type,
 			channel,
 			value,
-			cache: cache.mute[type],
+			cache: cache.channel[type].mute,
 		})}`
 	)
 	if (value === undefined) {

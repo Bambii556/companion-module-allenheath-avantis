@@ -1,53 +1,51 @@
-
-export enum ChannelType {
-    Input = 'input',
-    MonoGroup = 'monoGroup',
-    StereoGroup = 'stereoGroup',
-    MonoAux = 'monoAux',
-    StereoAux = 'stereoAux',
-    MonoMatrix = 'monoMatrix',
-    StereoMatrix = 'stereoMatrix',
-    MonoFXSend = 'monoFXSend',
-    StereoFXSend = 'stereoFXSend',
-    FXReturn = 'FXReturn',
-    Main = 'main',
-    DCA = 'dca',
-    Group = 'group'
-}
+import { CHANNEL_TYPE, Cache, ChannelType } from './types'
 
 export function determineChannelType(channelNumber: number, midiOffset: number): ChannelType {
-    switch (midiOffset) {
-        case 0:
-            return ChannelType.Input;
-        case 1:
-            if (channelNumber <= 39) {
-                return ChannelType.MonoGroup;
-            }
-            return ChannelType.StereoGroup;
-        case 2:
-            if (channelNumber <= 39) {
-                return ChannelType.MonoAux;
-            }
-            return ChannelType.StereoAux;
-        case 3:
-            if (channelNumber <= 39) {
-                return ChannelType.MonoMatrix;
-            }
-            return ChannelType.StereoMatrix;
-        case 4:
-            if (channelNumber <= 11) {
-                return ChannelType.MonoFXSend;
-            } else if (channelNumber <= 27) {
-                return ChannelType.StereoFXSend;
-            } else if (channelNumber <= 43) {
-                return ChannelType.FXReturn;
-            } else if (channelNumber <= 50) {
-                return ChannelType.Main;
-            } else if (channelNumber <= 69) {
-                return ChannelType.DCA;
-            }
-            return ChannelType.Group;
-    }
+	switch (midiOffset) {
+		case 0:
+			return CHANNEL_TYPE.Input
+		case 1:
+			if (channelNumber <= 39) {
+				return CHANNEL_TYPE.MonoGroup
+			}
+			return CHANNEL_TYPE.StereoGroup
+		case 2:
+			if (channelNumber <= 39) {
+				return CHANNEL_TYPE.MonoAux
+			}
+			return CHANNEL_TYPE.StereoAux
+		case 3:
+			if (channelNumber <= 39) {
+				return CHANNEL_TYPE.MonoMatrix
+			}
+			return CHANNEL_TYPE.StereoMatrix
+		case 4:
+			if (channelNumber <= 11) {
+				return CHANNEL_TYPE.MonoFXSend
+			} else if (channelNumber <= 27) {
+				return CHANNEL_TYPE.StereoFXSend
+			} else if (channelNumber <= 43) {
+				return CHANNEL_TYPE.FXReturn
+			} else if (channelNumber <= 50) {
+				return CHANNEL_TYPE.Main
+			} else if (channelNumber <= 69) {
+				return CHANNEL_TYPE.DCA
+			}
+			return CHANNEL_TYPE.MuteGroup
+	}
 
-    return ChannelType.Main;
+	return CHANNEL_TYPE.Scene
+}
+
+export function getCacheName(cache: Cache | undefined, type: ChannelType, channelNumber: number): string {
+	if (
+		cache &&
+		cache.channel &&
+		cache.channel[type] &&
+		cache.channel[type].name &&
+		cache.channel[type].name[`${channelNumber}`]
+	) {
+		return ` (${cache.channel[type].name[`${channelNumber}`]})`
+	}
+	return ''
 }
