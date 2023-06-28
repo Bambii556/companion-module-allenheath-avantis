@@ -1,6 +1,6 @@
 import { CompanionFeedbackDefinition, CompanionFeedbackDefinitions, combineRgb } from '@companion-module/base'
 import AvantisInstance from './index'
-import { Cache, CHANNEL_TYPE, ChannelType } from './types'
+import { CHANNEL_TYPE, ChannelType } from './types'
 import { getHex } from './utils'
 
 export function getFeedbackDefinitions(self: AvantisInstance): CompanionFeedbackDefinitions {
