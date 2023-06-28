@@ -68,7 +68,7 @@ export function getAvantisConfig(): AvantisConfig {
 			monoGroup: {
 				count: 40,
 				key: 'Group',
-				name: 'Mute Group',
+				name: 'Mono Group',
 				offset: {
 					midi: 1,
 					hex: -1,

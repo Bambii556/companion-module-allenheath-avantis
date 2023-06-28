@@ -1,3 +1,4 @@
+import { Choices } from './choices'
 import { CHANNEL_TYPE, Cache, ChannelType } from './types'
 
 export function determineChannelType(channelNumber: number, midiOffset: number): ChannelType {
@@ -48,4 +49,14 @@ export function getCacheName(cache: Cache | undefined, type: ChannelType, channe
 		return ` (${cache.channel[type].name[`${channelNumber}`]})`
 	}
 	return ''
+}
+
+export function getHex(choices: Choices, type: ChannelType, channelNumber: number, isHexValue: boolean) {
+	const choice = choices[type]
+	if (isHexValue) {
+		// Return the ID of the Channel
+		return channelNumber - choice.hexOffset
+	}
+	//TODO: Not sure what this would mean to return????
+	return channelNumber + choice.hexOffset
 }

@@ -88,11 +88,11 @@ function buildChoices(config: AvantisConfig, type: ChannelType, cache?: Cache): 
 		hexOffset: detail.offset.hex,
 		values: [],
 	}
-	for (let i = 1; i <= detail.count; i++) {
-		const name = getCacheName(cache, type, i)
+	for (let id = 1; id <= detail.count; id++) {
+		const name = getCacheName(cache, type, id)
 		choice.values.push({
-			id: i + detail.offset.hex,
-			label: `${detail.key} ${i}${name}`,
+			id: id + detail.offset.hex,
+			label: `${detail.key} ${id}${name}`,
 			hexOffset: detail.offset.hex,
 		})
 	}

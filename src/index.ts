@@ -7,7 +7,7 @@ import { getSceneSelection, Scene } from './scenes'
 import { AvantisConfig, getAvantisConfig, getColorByNumber, getNameByHex, getNameHexByName } from './avantisConfig'
 import { TCP } from './tcp'
 import { ChannelType, Cache, CHANNEL_TYPE } from './types'
-import { determineChannelType } from './utils'
+import { determineChannelType, getHex } from './utils'
 
 const SysExHeader = [0xf0, 0x00, 0x00, 0x1a, 0x50, 0x10, 0x01, 0x00]
 
@@ -415,8 +415,9 @@ class AvantisInstance extends InstanceBase<Config> {
 				this.runningStatusHandler(data, (values, channel, channelType) => {
 					// Ch Name Reply… 	=> SysEx Header, 0N, 02, CH, Name, F7
 					const name = getNameByHex(this.avantisConfig.name, values.slice(3))
-					this.cache.channel[channelType].name[`${channel}`] = name
-					this.log('debug', `${channelType}:${channel} => ${name}`)
+					this.setNameValueInCache(channelType, channel, name)
+					// this.cache.channel[channelType].name[`${channel}`] = name
+					// this.log('debug', `${channelType}:${channel} => ${name}`)
 				})
 				break
 
@@ -424,7 +425,9 @@ class AvantisInstance extends InstanceBase<Config> {
 				this.runningStatusHandler(data, (values, channel, channelType) => {
 					// Ch Colour Reply… 	=> SysEx Header, 0N, 05, CH, Col, F7
 					const color = getColorByNumber(this.avantisConfig, values[3])
-					this.cache.channel[channelType].color[`${channel}`] = color as string
+					this.setColorValueInCache(channelType, channel, color as string)
+					// const chHex = getHex(this.choices, channelType, channel)
+					// this.cache.channel[channelType].color[`${channel}`] = color as string
 				})
 				break
 
@@ -432,6 +435,8 @@ class AvantisInstance extends InstanceBase<Config> {
 				// Aux/FX/Mtx Sends 	=> SysEx Header, 0N , 0D, CH, SndN, SndCH, LV, F7
 				break
 		}
+
+		this.updateChoices()
 	}
 
 	private runningStatusHandler(
@@ -439,6 +444,7 @@ class AvantisInstance extends InstanceBase<Config> {
 		action: (values: number[], channel: number, channelType: ChannelType) => void
 	) {
 		// Ch Name Reply… 	=> SysEx Header, 0N, 02, CH, Name, F7
+		// 1,2,0,80,97,115,116,111,114,0,0,247
 		let endFlagIndx = data.indexOf(247) // '0xf7'
 		let startIndex = 0
 		do {
@@ -458,23 +464,30 @@ class AvantisInstance extends InstanceBase<Config> {
 	}
 
 	public setMuteValueInCache(type: ChannelType, channel: number, mute: boolean) {
-		this.log('debug', `Setting channel in cache '${type}:${channel}' => ${mute}`)
-		this.cache.channel[type].mute[`${channel}`] = mute
+		const chHex = getHex(this.choices, type, channel, true)
+		this.log('debug', `Setting Mute in cache '${type}:${chHex}' => ${mute}`)
+		this.cache.channel[type].mute[`${chHex}`] = mute
 		this.checkFeedbacks(`mute_${type}`)
 	}
 
-	public setColorValueInCache(type: ChannelType, channel: number, color: string) {
-		this.log('debug', `Setting channel in cache '${type}:${channel}' => ${color}`)
-		this.cache.channel[type].color[`${channel}`] = color
-		// this.checkFeedbacks(`mute_${type}`)
-		this.updateChoices()
+	public setColorValueInCache(type: ChannelType, channel: number, color: string, triggerActionReload: boolean = false) {
+		const chHex = getHex(this.choices, type, channel, true)
+		this.cache.channel[type].color[`${chHex}`] = color
+
+		if (triggerActionReload) {
+			this.log('debug', `Setting Color in cache '${type}:${chHex}' => ${color}`)
+			this.updateChoices()
+		}
 	}
 
-	public setNameValueInCache(type: ChannelType, channel: number, name: string) {
-		this.log('debug', `Setting channel in cache '${type}:${channel}' => ${name}`)
-		this.cache.channel[type].name[`${channel}`] = name
-		// this.checkFeedbacks(`mute_${type}`)
-		this.updateChoices()
+	public setNameValueInCache(type: ChannelType, channel: number, name: string, triggerActionReload: boolean = false) {
+		const chHex = getHex(this.choices, type, channel, true)
+		this.cache.channel[type].name[`${chHex}`] = name
+
+		if (triggerActionReload) {
+			this.log('debug', `Setting Name in cache '${type}:${chHex}' => ${name}`)
+			this.updateChoices()
+		}
 	}
 
 	// This is called when the TCP connect is initially establsihed
@@ -483,8 +496,6 @@ class AvantisInstance extends InstanceBase<Config> {
 		await this.getRemoteChannelDetails(0x01)
 		// Get Channel Colors
 		await this.getRemoteChannelDetails(0x04)
-
-		this.updateChoices()
 
 		//TODO: find out how to get the active Mute channels
 	}

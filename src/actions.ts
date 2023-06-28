@@ -256,7 +256,7 @@ function nameActionBuilder(self: AvantisInstance, name: string, type: ChannelTyp
 		callback: async (action: CompanionActionEvent) => {
 			const { channel, channelName } = action.options as { channel: number; channelName: string }
 			await self.sendChannelNameCommand(channel, channelName, choice.midiOffset)
-			self.cache.channel[type].name[`${channel}`] = channelName
+			self.setNameValueInCache(type, channel, channelName, true)
 		},
 	}
 }
@@ -287,7 +287,7 @@ function colorActionBuilder(self: AvantisInstance, name: string, type: ChannelTy
 		callback: async (action: CompanionActionEvent) => {
 			const { channel, color } = action.options as { channel: number; color: string }
 			await self.sendChannelColorCommand(channel, color, choice.midiOffset)
-			self.cache.channel[type].color[`${channel}`] = color
+			self.setColorValueInCache(type, channel, color, true)
 		},
 	}
 }

@@ -1,6 +1,7 @@
 import { CompanionFeedbackDefinition, CompanionFeedbackDefinitions, combineRgb } from '@companion-module/base'
 import AvantisInstance from './index'
 import { Cache, CHANNEL_TYPE, ChannelType } from './types'
+import { getHex } from './utils'
 
 export function getFeedbackDefinitions(self: AvantisInstance): CompanionFeedbackDefinitions {
 	const feedbacks: { [id: string]: CompanionFeedbackDefinition | undefined } = {}
@@ -44,16 +45,18 @@ function buildMuteFeedback(self: AvantisInstance, type: ChannelType): CompanionF
 			},
 		],
 		callback: (feedback) => {
-			return getMuteCachedValue(self.cache, type, feedback.options.channel as string)
+			return getMuteCachedValue(self, type, feedback.options.channel as string)
 		},
 	}
 }
 
-function getMuteCachedValue(cache: Cache, type: ChannelType, channel: string) {
+function getMuteCachedValue(self: AvantisInstance, type: ChannelType, channel: string) {
+	const { cache } = self
 	if (!cache || !cache.channel || !cache.channel[type] || !cache.channel[type].mute) {
 		return false
 	}
-	const value = cache.channel[type].mute[`${channel}`]
+	const hex = getHex(self.choices, type, parseInt(channel, 16), true)
+	const value = cache.channel[type].mute[`${hex}`]
 	console.log(
 		`Feedback data: ${JSON.stringify({
 			type,
