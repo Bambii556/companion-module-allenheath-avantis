@@ -516,6 +516,7 @@ class AvantisInstance extends InstanceBase<Config> {
 		await this.sendNameOrColorCommand(commandCode, CHANNEL_TYPE.MonoMatrix)
 		await this.sendNameOrColorCommand(commandCode, CHANNEL_TYPE.StereoMatrix)
 		await this.sendNameOrColorCommand(commandCode, CHANNEL_TYPE.MuteGroup)
+		await this.sendNameOrColorCommand(commandCode, CHANNEL_TYPE.DCA)
 		await this.sendNameOrColorCommand(commandCode, CHANNEL_TYPE.Scene)
 	}
 
