@@ -4,7 +4,6 @@
 	"shortname": "avantis",
 	"description": "Module to control Allen & Heath Avantis Mixer",
 	"version": "3.0.0",
-	"midiVersion": "1.10",
 	"license": "MIT",
 	"repository": "git+https://github.com/bitfocus/companion-module-allenheath-avantis.git",
 	"bugs": "https://github.com/bitfocus/companion-module-allenheath-avantis/issues",
