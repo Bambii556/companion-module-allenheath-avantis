@@ -8,8 +8,7 @@
 		"paths": {
 			"*": ["./node_modules/*"]
 		},
-		"noImplicitAny": false,
-		"types": ["node"],
-		"esModuleInterop": true
+		"module": "Node16",
+		"moduleResolution": "Node16"
 	}
 }

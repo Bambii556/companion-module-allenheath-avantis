@@ -1,416 +1,182 @@
-import {
-	CompanionActionContext,
-	CompanionActionDefinition,
-	CompanionActionDefinitions,
-	CompanionActionEvent,
-} from '@companion-module/base'
-import AvantisInstance from './index'
-import { Choice } from './choices'
-import { CHANNEL_TYPE, ChannelType } from './types'
+import type { ModuleInstance } from './main.js'
+import { CompanionActionDefinitions } from '@companion-module/base'
+import { ChannelType } from './types.js'
+import { CHANNEL_RANGES } from './helpers.js'
 
-/**
- * Returns all implemented actions.
- * @param self reference to the BaseInstance
- * @constructor
- * @returns CompanionActions
- */
-export function getActionDefinitions(self: AvantisInstance): CompanionActionDefinitions {
-	const actions: CompanionActionDefinitions = {}
-	const { choices } = self
 
-	// Mute Actions
-	actions['mute_input'] = muteActionBuilder(self, 'Mute Input', CHANNEL_TYPE.Input)
-	actions['mute_main'] = muteActionBuilder(self, 'Mute Main', CHANNEL_TYPE.Main)
-	actions['mute_mono_group'] = muteActionBuilder(self, 'Mute Mono Group', CHANNEL_TYPE.MonoGroup)
-	actions['mute_stereo_group'] = muteActionBuilder(self, 'Mute Stereo Group', CHANNEL_TYPE.StereoGroup)
-	actions['mute_mono_aux'] = muteActionBuilder(self, 'Mute Mono Aux', CHANNEL_TYPE.MonoAux)
-	actions['mute_stereo_aux'] = muteActionBuilder(self, 'Mute Stereo Aux', CHANNEL_TYPE.StereoAux)
-	actions['mute_mono_matrix'] = muteActionBuilder(self, 'Mute Mono Matrix', CHANNEL_TYPE.MonoMatrix)
-	actions['mute_stereo_matrix'] = muteActionBuilder(self, 'Mute Stereo Matrix', CHANNEL_TYPE.StereoMatrix)
-	actions['mute_mono_fx_send'] = muteActionBuilder(self, 'Mute Mono FX Send', CHANNEL_TYPE.MonoFXSend)
-	actions['mute_stereo_fx_send'] = muteActionBuilder(self, 'Mute Stereo FX Send', CHANNEL_TYPE.StereoFXSend)
-	actions['mute_fx_return'] = muteActionBuilder(self, 'Mute FX Return', CHANNEL_TYPE.FXReturn)
-	actions['mute_group'] = muteActionBuilder(self, 'Mute Group', CHANNEL_TYPE.MuteGroup)
-	actions['mute_dca'] = muteActionBuilder(self, 'Mute DCA', CHANNEL_TYPE.DCA)
+export function getActions(instance: ModuleInstance): CompanionActionDefinitions {
+    const actions: CompanionActionDefinitions = {
+        // Channel Mute Control
+        channel_mute: {
+            name: 'Channel Mute',
+            options: [
+                {
+                    type: 'dropdown',
+                    label: 'Channel Type',
+                    id: 'channelType',
+                    default: 'input',
+                    choices: Object.entries(CHANNEL_RANGES).map(([id, _range]) => ({
+                        id,
+                        label: id.replace(/_/g, ' ').toUpperCase()
+                    }))
+                },
+                {
+                    type: 'number',
+                    label: 'Channel Number',
+                    id: 'channel',
+                    default: 1,
+                    min: 1,
+                    max: 64
+                },
+                {
+                    type: 'dropdown',
+                    label: 'Action',
+                    id: 'muteState',
+                    default: 'toggle',
+                    choices: [
+                        { id: 'on', label: 'Mute On' },
+                        { id: 'off', label: 'Mute Off' },
+                        { id: 'toggle', label: 'Toggle Mute' }
+                    ]
+                }
+            ],
+            callback: async (action) => {
+                const channelType = action.options.channelType as ChannelType
+                const channel = Number(action.options.channel)
+                const range = CHANNEL_RANGES[channelType]
 
-	// Fader Actions
-	actions['fader_input'] = faderActionBuilder(self, 'Set Input Fader', CHANNEL_TYPE.Input)
-	actions['fader_mono_group'] = faderActionBuilder(self, 'Set Mono Group Fader', CHANNEL_TYPE.MonoGroup)
-	actions['fader_stereo_group'] = faderActionBuilder(self, 'Set Stereo Group Fader', CHANNEL_TYPE.StereoGroup)
-	actions['fader_mono_aux'] = faderActionBuilder(self, 'Set Mono Aux Fader', CHANNEL_TYPE.MonoAux)
-	actions['fader_stereo_aux'] = faderActionBuilder(self, 'Set Stereo Aux Fader', CHANNEL_TYPE.StereoAux)
-	actions['fader_mono_matrix'] = faderActionBuilder(self, 'Set Mono Matrix Fader', CHANNEL_TYPE.MonoMatrix)
-	actions['fader_stereo_matrix'] = faderActionBuilder(self, 'Set Stereo Matrix Fader', CHANNEL_TYPE.StereoMatrix)
-	actions['fader_mono_fx_send'] = faderActionBuilder(self, 'Set Mono FX Send Fader', CHANNEL_TYPE.MonoFXSend)
-	actions['fader_stereo_fx_send'] = faderActionBuilder(self, 'Set Stereo FXSend Fader', CHANNEL_TYPE.StereoFXSend)
-	actions['fader_main'] = faderActionBuilder(self, 'Set Main Fader', CHANNEL_TYPE.Main)
-	actions['fader_fx_return'] = faderActionBuilder(self, 'Set FX Fader', CHANNEL_TYPE.FXReturn)
-	actions['fader_dca'] = faderActionBuilder(self, 'Set DCA Fader', CHANNEL_TYPE.DCA)
+                if (channel < range.min || channel > range.max) {
+                    instance.log('error', `Invalid channel number ${channel} for type ${channelType}`)
+                    return
+                }
 
-	// Assign Actions
-	actions['dca_assign'] = assignActionBuilder(
-		'Assign DCA Groups for channel',
-		choices.input,
-		'dcaGroups',
-		choices.dca,
-		async (action: CompanionActionEvent) => {
-			const { channel, dcaGroups, assign } = action.options as { channel: number; dcaGroups: number[]; assign: boolean }
-			await self.sendAssignCommands(channel, dcaGroups, assign, true, choices.dca.midiOffset)
-		}
-	)
-	actions['mute_group_assign'] = assignActionBuilder(
-		'Assign Mute Groups for channel',
-		choices.input,
-		'muteGroups',
-		choices.muteGroup,
-		async (action: CompanionActionEvent) => {
-			const { channel, muteGroups, assign } = action.options as {
-				channel: number
-				muteGroups: number[]
-				assign: boolean
-			}
-			await self.sendAssignCommands(channel, muteGroups, assign, false, choices.muteGroup.midiOffset)
-		}
-	)
-	actions['channel_main_assign'] = assignActionBuilder(
-		'Assign Channel to Main Mix',
-		choices.input,
-		'mainMix',
-		choices.main,
-		async (action: CompanionActionEvent) => {
-			const { channel, assign } = action.options as { channel: number; assign: boolean }
-			await self.sendChannelAssignCommand(channel, assign, choices.main.midiOffset)
-		}
-	)
+                const midiChannel = instance.midiChannelForType(channelType)
+                const noteNumber = range.offset + (channel - 1)
 
-	// Name Actions
-	actions['name_input'] = nameActionBuilder(self, 'Set Input Name', CHANNEL_TYPE.Input)
-	actions['name_mono_group'] = nameActionBuilder(self, 'Set Mono Group Name', CHANNEL_TYPE.MonoGroup)
-	actions['name_stereo_group'] = nameActionBuilder(self, 'Set Stereo Group Name', CHANNEL_TYPE.StereoGroup)
-	actions['name_mono_aux'] = nameActionBuilder(self, 'Set Mono Aux Name', CHANNEL_TYPE.MonoAux)
-	actions['name_stereo_aux'] = nameActionBuilder(self, 'Set Stereo Aux Name', CHANNEL_TYPE.StereoAux)
-	actions['name_mono_matrix'] = nameActionBuilder(self, 'Set Mono Matrix Name', CHANNEL_TYPE.MonoMatrix)
-	actions['name_stereo_matrix'] = nameActionBuilder(self, 'Set Stereo Matrix Name', CHANNEL_TYPE.StereoMatrix)
-	actions['name_mono_fx_send'] = nameActionBuilder(self, 'Set Mono FXSend Name', CHANNEL_TYPE.MonoFXSend)
-	actions['name_stereo_fx_send'] = nameActionBuilder(self, 'Set Stereo FXSend Name', CHANNEL_TYPE.StereoFXSend)
-	actions['name_main'] = nameActionBuilder(self, 'Set Main Name', CHANNEL_TYPE.Main)
-	actions['name_fx_return'] = nameActionBuilder(self, 'Set FXReturn Name', CHANNEL_TYPE.FXReturn)
-	actions['name_dca'] = nameActionBuilder(self, 'Set DCA Name', CHANNEL_TYPE.DCA)
-	// TODO: Test if we can set and get a Name for a Scene
-	actions['name_scene'] = nameActionBuilder(self, 'Set Scene Name', CHANNEL_TYPE.Scene)
+                const currentState = instance.getMuteState(channelType, channel)
+                const newState = action.options.muteState === 'toggle' ? !currentState : action.options.muteState === 'on'
 
-	// Color Actions
-	actions['color_input'] = colorActionBuilder(self, 'Set Input Color', CHANNEL_TYPE.Input)
-	actions['color_mono_group'] = colorActionBuilder(self, 'Set Mono Group Color', CHANNEL_TYPE.MonoGroup)
-	actions['color_stereo_group'] = colorActionBuilder(self, 'Set Stereo Group Color', CHANNEL_TYPE.StereoGroup)
-	actions['color_mono_aux'] = colorActionBuilder(self, 'Set Mono Aux Color', CHANNEL_TYPE.MonoAux)
-	actions['color_stereo_aux'] = colorActionBuilder(self, 'Set Stereo Aux Color', CHANNEL_TYPE.StereoAux)
-	actions['color_mono_matrix'] = colorActionBuilder(self, 'Set Mono Matrix Color', CHANNEL_TYPE.MonoMatrix)
-	actions['color_stereo_matrix'] = colorActionBuilder(self, 'Set Stereo Matrix Color', CHANNEL_TYPE.StereoMatrix)
-	actions['color_mono_fx_send'] = colorActionBuilder(self, 'Set Mono FXSend Color', CHANNEL_TYPE.MonoFXSend)
-	actions['color_stereo_fx_send'] = colorActionBuilder(self, 'Set Stereo FXSend Color', CHANNEL_TYPE.StereoFXSend)
-	actions['color_main'] = colorActionBuilder(self, 'Set Main Color', CHANNEL_TYPE.Main)
-	actions['color_fx_return'] = colorActionBuilder(self, 'Set FXReturn Color', CHANNEL_TYPE.FXReturn)
-	actions['color_dca'] = colorActionBuilder(self, 'Set DCA Color', CHANNEL_TYPE.DCA)
-	// TODO: Test if we can set and get a Color for a Scene
-	actions['color_scene'] = colorActionBuilder(self, 'Set Scene Color', CHANNEL_TYPE.Scene)
+                // Mute values: velocity > 40 (0x7F) = Mute ON, velocity < 40 (0x3F) = Mute OFF
+                const message = Buffer.from([
+                    0x90 + midiChannel, // Note On
+                    noteNumber,
+                    newState ? 0x7F : 0x3F
+                ])
 
-	// Scene Actions
-	actions['scene_recall'] = {
-		name: 'Scene recall',
-		options: [
-			{
-				type: 'dropdown',
-				label: choices.scene.name,
-				id: 'sceneId',
-				choices: choices.scene.values,
-				default: choices.scene.values[0].id,
-				minChoicesForSearch: 0,
-			},
-		],
-		callback: async (action: CompanionActionEvent) => {
-			const { sceneId } = action.options as { sceneId: string }
-			await self.sendSceneCommand(sceneId, choices.scene.midiOffset)
-		},
-	}
+                instance.sendMIDIMessage(message)
+                instance.setMuteState(channelType, channel, newState)
+            }
+        },
 
-	// Send Actions
-	actions['send_input_to_mono_group'] = sendLevelActionBuilder(
-		self,
-		'Send Input to Mono Group',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.MonoGroup
-	)
-	actions['send_input_to_stereo_group'] = sendLevelActionBuilder(
-		self,
-		'Send Input to Stereo Group',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.StereoGroup
-	)
-	actions['send_input_to_mono_aux'] = sendLevelActionBuilder(
-		self,
-		'Send Input to Mono Aux',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.MonoAux
-	)
-	actions['send_input_to_stereo_aux'] = sendLevelActionBuilder(
-		self,
-		'Send Input to Stereo Aux',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.StereoAux
-	)
-	actions['send_input_to_mono_matrix'] = sendLevelActionBuilder(
-		self,
-		'Send Input to Mono Matrix',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.MonoMatrix
-	)
-	actions['send_input_to_stereo_matrix'] = sendLevelActionBuilder(
-		self,
-		'Send Input to Stereo Matrix',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.StereoMatrix
-	)
-	actions['send_input_to_mono_fx_send'] = sendLevelActionBuilder(
-		self,
-		'Send Input to Mono FX Return',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.MonoFXSend
-	)
-	actions['send_input_to_stereo_fx_send'] = sendLevelActionBuilder(
-		self,
-		'Send Input to Stereo FX Return',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.StereoFXSend
-	)
-	actions['send_input_to_fx_return'] = sendLevelActionBuilder(
-		self,
-		'Send Input to FX Return',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.FXReturn
-	)
-	actions['send_input_to_main'] = sendLevelActionBuilder(
-		self,
-		'Send Input to Main',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.Main
-	)
-	actions['send_input_to_dca'] = sendLevelActionBuilder(
-		self,
-		'Send Input to Main',
-		CHANNEL_TYPE.Input,
-		CHANNEL_TYPE.DCA
-	)
+        // Fader Level Control
+        fader_level: {
+            name: 'Set Fader Level',
+            options: [
+                {
+                    type: 'dropdown',
+                    label: 'Channel Type',
+                    id: 'channelType',
+                    default: 'input',
+                    choices: Object.entries(CHANNEL_RANGES).map(([id, _range]) => ({
+                        id,
+                        label: id.replace(/_/g, ' ').toUpperCase()
+                    }))
+                },
+                {
+                    type: 'number',
+                    label: 'Channel Number',
+                    id: 'channel',
+                    default: 1,
+                    min: 1,
+                    max: 64
+                },
+                {
+                    type: 'number',
+                    label: 'Level (dB)',
+                    id: 'level',
+                    default: 0,
+                    min: -90,
+                    max: 10,
+                    step: 0.1
+                }
+            ],
+            callback: async (action) => {
+                const channelType = action.options.channelType as ChannelType
+                const channel = Number(action.options.channel)
+                const level = Number(action.options.level)
+                const range = CHANNEL_RANGES[channelType]
 
-	return actions
+                if (channel < range.min || channel > range.max) {
+                    instance.log('error', `Invalid channel number ${channel} for type ${channelType}`)
+                    return
+                }
+
+                const midiChannel = instance.midiChannelForType(channelType)
+                const noteNumber = range.offset + (channel - 1)
+                const midiValue = dbToMIDI(level)
+
+                // NRPN message sequence for fader level (parameter 17/0x11)
+                const messages = [
+                    Buffer.from([0xB0 + midiChannel, 0x63, noteNumber]), // NRPN MSB
+                    Buffer.from([0xB0 + midiChannel, 0x62, 0x11]),      // NRPN LSB
+                    Buffer.from([0xB0 + midiChannel, 0x06, midiValue])  // Data Entry
+                ]
+
+                for (const message of messages) {
+                    instance.sendMIDIMessage(message)
+                }
+                
+                instance.setFaderLevel(channelType, channel, level)
+            }
+        },
+
+        // Scene Recall
+        recall_scene: {
+            name: 'Recall Scene',
+            options: [
+                {
+                    type: 'number',
+                    label: 'Scene Number',
+                    id: 'scene',
+                    default: 1,
+                    min: 1,
+                    max: 500
+                }
+            ],
+            callback: async (action) => {
+                const scene = Number(action.options.scene)
+                instance.recallScene(scene)
+            }
+        }
+    }
+
+    return actions
 }
 
-function muteActionBuilder(self: AvantisInstance, name: string, type: ChannelType): CompanionActionDefinition {
-	const choice = self.choices[type]
-	return {
-		name: name,
-		options: [
-			{
-				type: 'dropdown',
-				label: choice.name,
-				id: 'channel',
-				choices: choice.values,
-				default: choice.values[0].id,
-				minChoicesForSearch: 0,
-			},
-			{
-				type: 'checkbox',
-				label: 'Mute',
-				id: 'mute',
-				default: true,
-			},
-		],
-		callback: async (action: CompanionActionEvent) => {
-			const { channel, mute } = action.options as { channel: number; mute: boolean }
-			await self.sendMuteCommand(channel, mute, choice.midiOffset)
-			self.setMuteValueInCache(type, channel, mute)
-		},
-	}
-}
-
-function nameActionBuilder(self: AvantisInstance, name: string, type: ChannelType): CompanionActionDefinition {
-	const choice = self.choices[type]
-	return {
-		name: name,
-		options: [
-			{
-				type: 'dropdown',
-				label: choice.name,
-				id: 'channel',
-				choices: choice.values,
-				default: choice.values[0].id,
-				minChoicesForSearch: 0,
-			},
-			{
-				type: 'textinput',
-				label: 'Name of the Channel',
-				id: 'channelName',
-				tooltip: 'Enter a name for the channel to a Max of 8 Characters',
-			},
-		],
-		callback: async (action: CompanionActionEvent) => {
-			const { channel, channelName } = action.options as { channel: number; channelName: string }
-			await self.sendChannelNameCommand(channel, channelName, choice.midiOffset)
-			self.setNameValueInCache(type, channel, channelName, true)
-		},
-	}
-}
-
-function colorActionBuilder(self: AvantisInstance, name: string, type: ChannelType): CompanionActionDefinition {
-	const choice = self.choices[type]
-	const clrChoice = self.choices.color
-	return {
-		name: name,
-		options: [
-			{
-				type: 'dropdown',
-				label: choice.name,
-				id: 'channel',
-				choices: choice.values,
-				default: choice.values[0].id,
-				minChoicesForSearch: 0,
-			},
-			{
-				type: 'dropdown',
-				label: clrChoice.name,
-				id: 'color',
-				choices: clrChoice.values,
-				default: clrChoice.values[0].id,
-				minChoicesForSearch: 0,
-			},
-		],
-		callback: async (action: CompanionActionEvent) => {
-			const { channel, color } = action.options as { channel: number; color: string }
-			await self.sendChannelColorCommand(channel, color, choice.midiOffset)
-			self.setColorValueInCache(type, channel, color, true)
-		},
-	}
-}
-
-function faderActionBuilder(self: AvantisInstance, name: string, type: ChannelType): CompanionActionDefinition {
-	const choice = self.choices[type]
-	const fdrChoice = self.choices.fader
-	return {
-		name: name,
-		options: [
-			{
-				type: 'dropdown',
-				label: choice.name,
-				id: 'channel',
-				choices: choice.values,
-				default: choice.values[0].id,
-				minChoicesForSearch: 0,
-			},
-			{
-				type: 'dropdown',
-				label: fdrChoice.name,
-				id: 'level',
-				choices: fdrChoice.values,
-				default: fdrChoice.values[0].id,
-				minChoicesForSearch: 0,
-			},
-		],
-		callback: async (action: CompanionActionEvent) => {
-			const { channel, level } = action.options as { channel: number; level: number }
-			await self.sendFaderCommand(channel, level, choice.midiOffset)
-		},
-	}
-}
-
-function sendLevelActionBuilder(
-	self: AvantisInstance,
-	name: string,
-	srcType: ChannelType,
-	destType: ChannelType
-): CompanionActionDefinition {
-	const fdrChoice = self.choices.fader
-	const srcChoice = self.choices[srcType]
-	const destChoice = self.choices[destType]
-
-	return {
-		name: name,
-		options: [
-			{
-				type: 'multidropdown',
-				label: srcChoice.name,
-				id: 'srcChannel',
-				default: [],
-				choices: srcChoice.values,
-				minChoicesForSearch: 0,
-			},
-			{
-				type: 'dropdown',
-				label: destChoice.name,
-				id: 'destChannel',
-				choices: destChoice.values,
-				default: destChoice.values[0].id,
-				minChoicesForSearch: 0,
-			},
-			{
-				type: 'dropdown',
-				label: fdrChoice.name,
-				id: 'level',
-				choices: fdrChoice.values,
-				default: fdrChoice.values[0].id,
-				minChoicesForSearch: 0,
-			},
-		],
-		callback: async (action: CompanionActionEvent) => {
-			const { srcChannel, destChannel, level } = action.options as {
-				srcChannel: number
-				destChannel: number
-				level: string
-			}
-			const src = {
-				channel: srcChannel,
-				midiOffset: srcChoice.midiOffset,
-			}
-			const dest = {
-				channel: destChannel,
-				midiOffset: destChoice.midiOffset,
-			}
-			await self.sendLevelSendCommand(src, dest, level)
-		},
-	}
-}
-
-function assignActionBuilder(
-	name: string,
-	srcChoice: Choice,
-	destId: string,
-	destChoice: Choice,
-	callback: (action: CompanionActionEvent, context: CompanionActionContext) => Promise<void> | void
-): CompanionActionDefinition {
-	return {
-		name: name,
-		options: [
-			{
-				type: 'dropdown',
-				label: srcChoice.name,
-				id: 'channel',
-				choices: srcChoice.values,
-				default: srcChoice.values[0].id,
-				minChoicesForSearch: 0,
-			},
-			{
-				type: 'multidropdown',
-				label: destChoice.name,
-				id: destId,
-				default: [],
-				choices: destChoice.values,
-			},
-			{
-				type: 'checkbox',
-				label: 'Assign',
-				id: 'assign',
-				default: true,
-			},
-		],
-		callback: callback,
-	}
+// Helper function to convert dB to MIDI value
+function dbToMIDI(db: number): number {
+    if (db <= -Infinity) return 0
+    if (db >= 10) return 127
+    
+    // Linear interpolation between key points
+    const points = [
+        { db: -Infinity, midi: 0 },
+        { db: -40, midi: 0x1B },
+        { db: -30, midi: 0x2F },
+        { db: -20, midi: 0x43 },
+        { db: -10, midi: 0x57 },
+        { db: 0, midi: 0x6B },
+        { db: 5, midi: 0x74 },
+        { db: 10, midi: 0x7F }
+    ]
+    
+    // Find the two points to interpolate between
+    for (let i = 0; i < points.length - 1; i++) {
+        if (db >= points[i].db && db <= points[i + 1].db) {
+            const ratio = (db - points[i].db) / (points[i + 1].db - points[i].db)
+            return Math.round(points[i].midi + ratio * (points[i + 1].midi - points[i].midi))
+        }
+    }
+    
+    return 0
 }

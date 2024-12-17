@@ -1,73 +1,167 @@
-import { CompanionFeedbackDefinition, CompanionFeedbackDefinitions, combineRgb } from '@companion-module/base'
-import AvantisInstance from './index'
-import { CHANNEL_TYPE, ChannelType } from './types'
-import { getHex } from './utils'
+import { combineRgb, type CompanionFeedbackDefinitions } from '@companion-module/base'
+import type { ModuleInstance } from './main.js'
+import { CHANNEL_RANGES } from './helpers.js'
+import { ChannelType } from './types.js'
 
-export function getFeedbackDefinitions(self: AvantisInstance): CompanionFeedbackDefinitions {
-	const feedbacks: { [id: string]: CompanionFeedbackDefinition | undefined } = {}
+export function getFeedbacks(instance: ModuleInstance): CompanionFeedbackDefinitions {
+    const feedbacks: CompanionFeedbackDefinitions = {
+        // Channel Mute State Feedback
+        channelMute: {
+            type: 'boolean',
+            name: 'Channel Mute State',
+            description: 'Changes button color based on channel mute state',
+            defaultStyle: {
+                bgcolor: combineRgb(255, 0, 0),
+                color: combineRgb(255, 255, 255),
+            },
+            options: [
+                {
+                    type: 'dropdown',
+                    label: 'Channel Type',
+                    id: 'channelType',
+                    default: 'input',
+                    choices: Object.entries(CHANNEL_RANGES).map(([id, _range]) => ({
+                        id,
+                        label: id.replace(/_/g, ' ').toUpperCase()
+                    }))
+                },
+                {
+                    type: 'number',
+                    label: 'Channel Number',
+                    id: 'channel',
+                    default: 1,
+                    min: 1,
+                    max: 64
+                }
+            ],
+            callback: (feedback) => {
+                const channelType = feedback.options.channelType as ChannelType
+                const channel = Number(feedback.options.channel)
+                return instance.getMuteState(channelType, channel)
+            }
+        },
 
-	feedbacks[`mute_${CHANNEL_TYPE.Input}`] = buildMuteFeedback(self, CHANNEL_TYPE.Input)
-	feedbacks[`mute_${CHANNEL_TYPE.Main}`] = buildMuteFeedback(self, CHANNEL_TYPE.Main)
-	feedbacks[`mute_${CHANNEL_TYPE.MonoGroup}`] = buildMuteFeedback(self, CHANNEL_TYPE.MonoGroup)
-	feedbacks[`mute_${CHANNEL_TYPE.StereoGroup}`] = buildMuteFeedback(self, CHANNEL_TYPE.StereoGroup)
-	feedbacks[`mute_${CHANNEL_TYPE.MonoAux}`] = buildMuteFeedback(self, CHANNEL_TYPE.MonoAux)
-	feedbacks[`mute_${CHANNEL_TYPE.StereoAux}`] = buildMuteFeedback(self, CHANNEL_TYPE.StereoAux)
-	feedbacks[`mute_${CHANNEL_TYPE.MonoMatrix}`] = buildMuteFeedback(self, CHANNEL_TYPE.MonoMatrix)
-	feedbacks[`mute_${CHANNEL_TYPE.StereoMatrix}`] = buildMuteFeedback(self, CHANNEL_TYPE.StereoMatrix)
-	feedbacks[`mute_${CHANNEL_TYPE.MonoFXSend}`] = buildMuteFeedback(self, CHANNEL_TYPE.MonoFXSend)
-	feedbacks[`mute_${CHANNEL_TYPE.StereoFXSend}`] = buildMuteFeedback(self, CHANNEL_TYPE.StereoFXSend)
-	feedbacks[`mute_${CHANNEL_TYPE.FXReturn}`] = buildMuteFeedback(self, CHANNEL_TYPE.FXReturn)
-	feedbacks[`mute_${CHANNEL_TYPE.MuteGroup}`] = buildMuteFeedback(self, CHANNEL_TYPE.MuteGroup)
-	feedbacks[`mute_${CHANNEL_TYPE.DCA}`] = buildMuteFeedback(self, CHANNEL_TYPE.DCA)
+        // Fader Level Feedback
+        faderLevel: {
+            type: 'advanced',
+            name: 'Fader Level',
+            description: 'Shows fader level value or changes color based on threshold',
+            options: [
+                {
+                    type: 'dropdown',
+                    label: 'Channel Type',
+                    id: 'channelType',
+                    default: 'input',
+                    choices: Object.entries(CHANNEL_RANGES).map(([id, _range]) => ({
+                        id,
+                        label: id.replace(/_/g, ' ').toUpperCase()
+                    }))
+                },
+                {
+                    type: 'number',
+                    label: 'Channel Number',
+                    id: 'channel',
+                    default: 1,
+                    min: 1,
+                    max: 64
+                },
+                {
+                    type: 'dropdown',
+                    label: 'Display Style',
+                    id: 'style',
+                    default: 'text',
+                    choices: [
+                        { id: 'text', label: 'Show Level Value' },
+                        { id: 'threshold', label: 'Color Based on Threshold' }
+                    ]
+                },
+                {
+                    type: 'number',
+                    label: 'Threshold (dB)',
+                    id: 'threshold',
+                    default: 0,
+                    min: -90,
+                    max: 10,
+                    isVisible: (options) => options.style === 'threshold'
+                }
+            ],
+            callback: (feedback) => {
+                const channelType = feedback.options.channelType as ChannelType
+                const channel = Number(feedback.options.channel)
+                const level = instance.getFaderLevel(channelType, channel)
+                
+                if (feedback.options.style === 'text') {
+                    return {
+                        text: `${level.toFixed(1)} dB`
+                    }
+                } else {
+                    // Threshold-based color
+                    const threshold = Number(feedback.options.threshold)
+                    const isAboveThreshold = level >= threshold
+                    
+                    return {
+                        bgcolor: isAboveThreshold ? combineRgb(0, 255, 0) : combineRgb(255, 255, 0),
+                        color: combineRgb(0, 0, 0)
+                    }
+                }
+            }
+        },
 
-	return feedbacks
-}
+        // Current Scene Feedback
+        currentScene: {
+            type: 'advanced',
+            name: 'Current Scene',
+            description: 'Shows current scene number/name or indicates if this is the active scene',
+            options: [
+                {
+                    type: 'dropdown',
+                    label: 'Display Type',
+                    id: 'displayType',
+                    default: 'number',
+                    choices: [
+                        { id: 'number', label: 'Scene Number' },
+                        { id: 'name', label: 'Scene Name' },
+                        { id: 'both', label: 'Number & Name' },
+                        { id: 'highlight', label: 'Highlight if Active' }
+                    ]
+                },
+                {
+                    type: 'number',
+                    label: 'Scene Number',
+                    id: 'scene',
+                    default: 1,
+                    min: 1,
+                    max: 500,
+                    isVisible: (options) => options.displayType === 'highlight'
+                }
+            ],
+            callback: (feedback, _context) => {
+                let sceneNumber = instance.getVariableValue('current_scene') as number
+                let sceneName = instance.getVariableValue('current_scene_name') as string
 
-function buildMuteFeedback(self: AvantisInstance, type: ChannelType): CompanionFeedbackDefinition {
-	const choice = self.choices[type]
-	const config = self.avantisConfig.channel[type]
-	return {
-		type: 'boolean',
-		name: `${config.name} Mute State`,
-		description: 'Check the mute state of the selected channels',
-		defaultStyle: {
-			color: combineRgb(255, 255, 255),
-			bgcolor: combineRgb(255, 0, 0),
-		},
-		options: [
-			{
-				type: 'dropdown',
-				label: choice.name,
-				id: 'channel',
-				choices: choice.values,
-				default: choice.values[0].id,
-				minChoicesForSearch: 0,
-			},
-		],
-		callback: (feedback) => {
-			return getMuteCachedValue(self, type, feedback.options.channel as string)
-		},
-	}
-}
+                if (!sceneNumber) sceneNumber = 0
+                if (!sceneName) sceneName = ''
 
-function getMuteCachedValue(self: AvantisInstance, type: ChannelType, channel: string) {
-	const { cache } = self
-	if (!cache || !cache.channel || !cache.channel[type] || !cache.channel[type].mute) {
-		return false
-	}
-	const hex = getHex(self.choices, type, parseInt(channel, 16), true)
-	const value = cache.channel[type].mute[`${hex}`]
-	console.log(
-		`Feedback data: ${JSON.stringify({
-			type,
-			channel,
-			value,
-			cache: cache.channel[type].mute,
-		})}`
-	)
-	if (value === undefined) {
-		return false
-	}
+                switch (feedback.options.displayType) {
+                    case 'number':
+                        return { text: sceneNumber.toString() }
+                    case 'name':
+                        return { text: sceneName }
+                    case 'both':
+                        return { text: `${sceneNumber}: ${sceneName}` }
+                    case 'highlight': {
+                        const isActive = sceneNumber === Number(feedback.options.scene)
+                        return {
+                            bgcolor: isActive ? combineRgb(0, 255, 0) : combineRgb(0, 0, 0),
+                            color: isActive ? combineRgb(0, 0, 0) : combineRgb(255, 255, 255)
+                        }
+                    }
+                    default:
+                        return { text: sceneNumber.toString() } // Default fallback
+                }
+            }
+        }
+    }
 
-	return value
+    return feedbacks
 }
