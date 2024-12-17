@@ -1,6 +1,7 @@
 import { 
     InstanceBase, 
     InstanceStatus, 
+    runEntrypoint, 
     SomeCompanionConfigField
 } from '@companion-module/base'
 import { GetConfigFields } from './config.js'
@@ -11,6 +12,7 @@ import { MIDIProcessor } from './midi-processor.ts.js'
 import {getPresets} from './presets.js'
 import * as net from 'net'
 import { ModuleConfig } from './types.js'
+import { UpgradeScripts } from './upgrades.js'
 
 export class ModuleInstance extends InstanceBase<ModuleConfig> {
     private socket: net.Socket | null = null
@@ -22,6 +24,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
     private readonly MIDI_MESSAGE_DELAY = 20
     private readonly RECONNECT_INTERVAL = 5000
     private lastBankChange = 0
+    private isDestroying = false
     
     // State tracking
     private channelStates: Map<string, boolean> = new Map()
@@ -38,19 +41,40 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
      * Main initialization function called once the module is OK to start doing things
      */
     async init(config: ModuleConfig, isFirstInit: boolean): Promise<void> {
-        this.config = config
-        this.updateStatus(InstanceStatus.Connecting)
-        
-        this.setupSocket()
+        this.log('info', 'Initializing')
+        try {
+            // Always store config and set up basic functionality
+            this.config = config
+            this.isDestroying = false
 
-        // Set up actions, feedbacks, and variables
-        this.setActionDefinitions(getActions(this))
-        this.setFeedbackDefinitions(getFeedbacks(this))
-        this.setVariableDefinitions(getVariables(this))
-        this.setPresetDefinitions(getPresets())
+            // Set up actions, feedbacks, and variables first
+            this.setActionDefinitions(getActions(this))
+            this.setFeedbackDefinitions(getFeedbacks(this))
+            this.setVariableDefinitions(getVariables(this))
+            this.setPresetDefinitions(getPresets())
 
-        if (isFirstInit) {
-            this.log('info', 'First time initialization')
+            // Validate config
+            if (!this.config.host || !this.config.port) {
+                this.updateStatus(InstanceStatus.BadConfig, 'Missing host or port configuration')
+                return
+            }
+
+            // Only try to connect if we have valid config
+            this.updateStatus(InstanceStatus.Connecting)
+            await this.setupSocket()
+
+            if (isFirstInit) {
+                this.log('info', 'First time initialization')
+            }
+        } catch (error) {
+            let message = 'Initialization error'
+            if (error instanceof Error) message = error.message
+            this.log('error', `Init failed: ${message}`)
+            
+            // Don't show connection failure if we're destroying
+            if (!this.isDestroying) {
+                this.updateStatus(InstanceStatus.ConnectionFailure, message)
+            }
         }
     }
 
@@ -58,14 +82,23 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
      * Clean up the instance before it is destroyed
      */
     async destroy(): Promise<void> {
-        if (this.socket) {
-            this.socket.destroy()
-            this.socket = null
-        }
+        this.isDestroying = true
+        
         if (this.reconnectTimer) {
             clearInterval(this.reconnectTimer)
             this.reconnectTimer = null
         }
+
+        if (this.socket) {
+            // Remove all listeners to prevent any callbacks
+            this.socket.removeAllListeners()
+            this.socket.destroy()
+            this.socket = null
+        }
+
+        // Clear any queued messages
+        this.midiQueue = []
+        this.processingQueue = false
     }
 
     /**
@@ -86,56 +119,74 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
     /**
      * Socket setup and management
      */
-    private setupSocket(): void {
-        if (this.socket) {
-            this.socket.destroy()
-            this.socket = null
-        }
-
-        this.socket = new net.Socket()
-        
-        this.socket.on('connect', () => {
-            this.updateStatus(InstanceStatus.Ok)
-            this.log('info', `Connected to Avantis at ${this.config.host}:${this.config.port}`)
-            if (this.reconnectTimer) {
-                clearInterval(this.reconnectTimer)
-                this.reconnectTimer = null
+    private setupSocket(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (this.socket) {
+                this.socket.destroy()
+                this.socket = null
             }
-        })
-
-        this.socket.on('error', (error) => {
-            this.log('error', `Socket error: ${error.message}`)
-            this.updateStatus(InstanceStatus.ConnectionFailure)
-        })
-
-        this.socket.on('close', () => {
-            this.updateStatus(InstanceStatus.Disconnected)
-            this.log('warn', 'Connection closed')
-            this.scheduleReconnect()
-        })
-
-        this.socket.on('data', (data) => {
-            this.midiProcessor.processMIDIMessage(data)
-        })
-
-        this.connectSocket()
-    }
-
-    private connectSocket(): void {
-        if (!this.socket || !this.config) return
-
-        this.socket.connect({
-            host: this.config.host,
-            port: this.config.port
+    
+            let connectionTimeout: NodeJS.Timeout
+    
+            this.socket = new net.Socket()
+            
+            // Set up connection timeout
+            connectionTimeout = setTimeout(() => {
+                this.socket?.destroy()
+                reject(new Error('Connection timeout'))
+            }, 5000) // 5 second timeout
+    
+            this.socket.on('connect', () => {
+                clearTimeout(connectionTimeout)
+                this.updateStatus(InstanceStatus.Ok)
+                this.log('info', `Connected to Avantis at ${this.config.host}:${this.config.port}`)
+                if (this.reconnectTimer) {
+                    clearInterval(this.reconnectTimer)
+                    this.reconnectTimer = null
+                }
+                resolve()
+            })
+    
+            this.socket.on('error', (error) => {
+                clearTimeout(connectionTimeout)
+                this.log('error', `Socket error: ${error.message}`)
+                this.updateStatus(InstanceStatus.ConnectionFailure, error.message)
+                reject(error)
+            })
+    
+            this.socket.on('close', () => {
+                this.updateStatus(InstanceStatus.Disconnected)
+                this.log('warn', 'Connection closed')
+                this.scheduleReconnect()
+            })
+    
+            this.socket.on('data', (data) => {
+                this.midiProcessor.processMIDIMessage(data)
+            })
+    
+            try {
+                this.socket.connect({
+                    host: this.config.host,
+                    port: this.config.port
+                })
+            } catch (error) {
+                clearTimeout(connectionTimeout)
+                reject(error)
+            }
         })
     }
 
     private scheduleReconnect(): void {
+        // Only schedule reconnect if we have required config
+        if (!this.config.host || !this.config.port) return
+        
         if (this.reconnectTimer) return
-
+    
         this.reconnectTimer = setInterval(() => {
             this.log('info', 'Attempting to reconnect...')
-            this.connectSocket()
+            this.setupSocket().catch((error) => {
+                this.log('debug', `Reconnect failed: ${error.message}`)
+            })
         }, this.RECONNECT_INTERVAL)
     }
 
@@ -250,3 +301,5 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
         return baseChannel + (channelOffsets[type] || 0)
     }
 }
+
+runEntrypoint(ModuleInstance, UpgradeScripts)
