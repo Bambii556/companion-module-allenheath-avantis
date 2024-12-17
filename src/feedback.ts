@@ -20,7 +20,7 @@ export function getFeedbacks(instance: ModuleInstance): CompanionFeedbackDefinit
                     label: 'Channel Type',
                     id: 'channelType',
                     default: 'input',
-                    choices: Object.entries(CHANNEL_RANGES).map(([id, _range]) => ({
+                    choices: Object.entries(CHANNEL_RANGES).map(([id]) => ({
                         id,
                         label: id.replace(/_/g, ' ').toUpperCase()
                     }))
@@ -52,7 +52,7 @@ export function getFeedbacks(instance: ModuleInstance): CompanionFeedbackDefinit
                     label: 'Channel Type',
                     id: 'channelType',
                     default: 'input',
-                    choices: Object.entries(CHANNEL_RANGES).map(([id, _range]) => ({
+                    choices: Object.entries(CHANNEL_RANGES).map(([id]) => ({
                         id,
                         label: id.replace(/_/g, ' ').toUpperCase()
                     }))
@@ -159,6 +159,73 @@ export function getFeedbacks(instance: ModuleInstance): CompanionFeedbackDefinit
                     default:
                         return { text: sceneNumber.toString() } // Default fallback
                 }
+            }
+        },
+
+        midiStrip: {
+            type: 'advanced',
+            name: 'MIDI Strip Status',
+            description: 'Shows MIDI strip control value or state',
+            options: [
+                {
+                    type: 'number',
+                    label: 'Strip Number',
+                    id: 'strip',
+                    default: 1,
+                    min: 1,
+                    max: 32
+                },
+                {
+                    type: 'dropdown',
+                    label: 'Control Type',
+                    id: 'controlType',
+                    default: 'fader',
+                    choices: [
+                        { id: 'fader', label: 'Fader Level' },
+                        { id: 'mute', label: 'Mute State' },
+                        { id: 'mix', label: 'Mix State' },
+                        { id: 'pafl', label: 'PAFL State' }
+                    ]
+                }
+            ],
+            callback: (feedback) => {
+                const strip = Number(feedback.options.strip)
+                const stripKey = `midi_strip_${strip}_${feedback.options.controlType}`
+                const value = instance.getVariableValue(stripKey)
+
+                if (feedback.options.controlType === 'fader') {
+                    return { text: value !== undefined ? `${value}` : '0' }
+                } else {
+                    const isActive = value === 'on'
+                    return {
+                        bgcolor: isActive ? combineRgb(255, 0, 0) : combineRgb(0, 0, 0),
+                        color: combineRgb(255, 255, 255)
+                    }
+                }
+            }
+        },
+
+        softkey: {
+            type: 'boolean',
+            name: 'SoftKey State',
+            description: 'Shows if softkey is pressed',
+            options: [
+                {
+                    type: 'number',
+                    label: 'SoftKey Number',
+                    id: 'key',
+                    default: 1,
+                    min: 1,
+                    max: 16
+                }
+            ],
+            defaultStyle: {
+                bgcolor: combineRgb(255, 0, 0),
+                color: combineRgb(255, 255, 255)
+            },
+            callback: (feedback) => {
+                const key = Number(feedback.options.key)
+                return instance.getVariableValue(`softkey_${key}_state`) === 'pressed'
             }
         }
     }

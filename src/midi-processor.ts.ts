@@ -36,6 +36,24 @@ export class MIDIProcessor {
             case MIDI_STATUS.PROGRAM_CHANGE:
                 this.handleProgramChange(message)
                 break
+
+            case 0xB1: // MIDI Strip Fader
+                this.handleMIDIStripFader(message)
+                break
+
+            case 0xB2: // MIDI Strip Controls
+                this.handleMIDIStripControl(message)
+                break
+
+            case 0x91: // MIDI Strip Switches
+                this.handleMIDIStripSwitch(message)
+                break
+
+            case 0x90: // SoftKeys (when channel matches base channel)
+                if (message.channel === this.instance.config.baseChannel - 1) {
+                    this.handleSoftKey(message)
+                }
+                break
         }
     }
 
@@ -228,5 +246,82 @@ export class MIDIProcessor {
 
     private parseSysExString(data: Buffer): string {
         return data.toString('ascii').replace(/\0/g, '')
+    }
+
+    private handleMIDIStripFader(message: MIDIMessage): void {
+        const strip = message.data1 + 1  // Strip number (0-based to 1-based)
+        const value = message.data2      // Fader value (0-127)
+
+        this.instance.setVariableValues({
+            [`midi_strip_${strip}_fader`]: value
+        })
+        this.instance.checkFeedbacks('midiStrip')
+    }
+
+    private handleMIDIStripControl(message: MIDIMessage): void {
+        let controlType: string
+        let strip: number
+
+        // Determine control type and strip number based on data1
+        if (message.data1 < 0x20) {
+            // Gain control (0x00-0x1F)
+            controlType = 'gain'
+            strip = message.data1 + 1
+        } else if (message.data1 < 0x40) {
+            // Pan control (0x20-0x3F)
+            controlType = 'pan'
+            strip = (message.data1 - 0x20) + 1
+        } else if (message.data1 < 0x60) {
+            // Sends control (0x40-0x5F)
+            controlType = 'sends'
+            strip = (message.data1 - 0x40) + 1
+        } else {
+            // Custom controls (0x60-0x7F)
+            controlType = 'custom'
+            strip = (message.data1 - 0x60) + 1
+        }
+
+        this.instance.setVariableValues({
+            [`midi_strip_${strip}_${controlType}`]: message.data2
+        })
+    }
+
+    private handleMIDIStripSwitch(message: MIDIMessage): void {
+        let controlType: string
+        let strip: number
+
+        // Determine switch type and strip number based on data1
+        if (message.data1 < 0x20) {
+            // Mute switches (0x00-0x1F)
+            controlType = 'mute'
+            strip = message.data1 + 1
+        } else if (message.data1 < 0x40) {
+            // Mix switches (0x20-0x3F)
+            controlType = 'mix'
+            strip = (message.data1 - 0x20) + 1
+        } else {
+            // PAFL switches (0x40-0x5F)
+            controlType = 'pafl'
+            strip = (message.data1 - 0x40) + 1
+        }
+
+        const state = message.data2 > 64 ? 'on' : 'off'
+        this.instance.setVariableValues({
+            [`midi_strip_${strip}_${controlType}`]: state
+        })
+        this.instance.checkFeedbacks('midiStrip')
+    }
+
+    private handleSoftKey(message: MIDIMessage): void {
+        // SoftKeys use notes starting at 0x60
+        if (message.data1 >= 0x60 && message.data1 < 0x70) {
+            const keyNumber = message.data1 - 0x60 + 1  // Convert to 1-based key number
+            const state = message.data2 > 64 ? 'pressed' : 'released'
+
+            this.instance.setVariableValues({
+                [`softkey_${keyNumber}_state`]: state
+            })
+            this.instance.checkFeedbacks('softkey')
+        }
     }
 }

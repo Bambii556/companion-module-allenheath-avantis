@@ -5,9 +5,10 @@ import {
 } from '@companion-module/base'
 import { GetConfigFields } from './config.js'
 import { getActions } from './actions.js'
-import { getFeedbacks } from './feedbacks.js'
-import { getVariables } from './variables.ts'
-import { MIDIProcessor } from './midi-processor.ts'
+import { getFeedbacks } from './feedback.js'
+import { getVariables } from './variables.js'
+import { MIDIProcessor } from './midi-processor.ts.js'
+import {getPresets} from './presets.js'
 import * as net from 'net'
 import { ModuleConfig } from './types.js'
 
@@ -46,6 +47,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
         this.setActionDefinitions(getActions(this))
         this.setFeedbackDefinitions(getFeedbacks(this))
         this.setVariableDefinitions(getVariables(this))
+        this.setPresetDefinitions(getPresets())
 
         if (isFirstInit) {
             this.log('info', 'First time initialization')

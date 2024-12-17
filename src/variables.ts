@@ -44,5 +44,35 @@ export function getVariables(_instance: ModuleInstance): CompanionVariableDefini
         }
     )
 
+    // Add MIDI Strip variables
+    for (let strip = 1; strip <= 32; strip++) {
+        variables.push(
+            {
+                variableId: `midi_strip_${strip}_fader`,
+                name: `MIDI Strip ${strip} Fader Level`
+            },
+            {
+                variableId: `midi_strip_${strip}_mute`,
+                name: `MIDI Strip ${strip} Mute State`
+            },
+            {
+                variableId: `midi_strip_${strip}_mix`,
+                name: `MIDI Strip ${strip} Mix State`
+            },
+            {
+                variableId: `midi_strip_${strip}_pafl`,
+                name: `MIDI Strip ${strip} PAFL State`
+            }
+        )
+    }
+
+    // Add SoftKey variables
+    for (let key = 1; key <= 16; key++) {
+        variables.push({
+            variableId: `softkey_${key}_state`,
+            name: `SoftKey ${key} State`
+        })
+    }
+
     return variables
 }
