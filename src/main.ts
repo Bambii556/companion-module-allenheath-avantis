@@ -1,13 +1,13 @@
-import { InstanceBase, Regex, runEntrypoint, InstanceStatus, SomeCompanionConfigField, EmptyUpgradeScript } from '@companion-module/base'
+import { InstanceBase, Regex, runEntrypoint, InstanceStatus, SomeCompanionConfigField } from '@companion-module/base'
 import UpdateActions from './actions'
 import UpdateFeedbacks from './feedbacks'
 import UpdateVariableDefinitions from './variables'
+import UpgradeScripts from './upgrades'
 import * as net from 'net'
 import avantisConfig from './avantisconfig.json'
 
 const PORT = 51325
-const SysExHeader = [0xF0, 0x00, 0x00, 0x1A, 0x50, 0x10, 0x01, 0x00]
-
+const SysExHeader = [0xf0, 0x00, 0x00, 0x1a, 0x50, 0x10, 0x01, 0x00]
 
 const configFields: SomeCompanionConfigField[] = [
 	{
@@ -37,18 +37,29 @@ const configFields: SomeCompanionConfigField[] = [
 	},
 ]
 
+interface FadeTimer {
+	interval: NodeJS.Timeout
+	channel: number
+	midiOffset: number
+	currentLevel: number
+	targetLevel: number
+	step: number
+}
+
 class ModuleInstance extends InstanceBase<typeof configFields> {
 	devMode: any
 
 	config: any
 	tcpSocket: any
 	scenes: any
+	fadeTimers: Map<string, FadeTimer>
 
 	tSockets: any
 	tSocket: any
 
-	init = async (config: any) =>  {
+	init = async (config: any) => {
 		this.config = config
+		this.fadeTimers = new Map()
 
 		this.updateStatus(InstanceStatus.Ok)
 
@@ -63,15 +74,20 @@ class ModuleInstance extends InstanceBase<typeof configFields> {
 	}
 
 	// When module gets deleted
-	destroy = async ()=> {
+	destroy = async () => {
+		// Clear all fade timers
+		this.fadeTimers.forEach((timer) => {
+			clearInterval(timer.interval)
+		})
+		this.fadeTimers.clear()
+
 		if (this.tcpSocket !== undefined) {
-			this.tcpSocket.destroy();
+			this.tcpSocket.destroy()
 		}
 
-		this.log('debug', `destroyed ${this.id}`);
+		this.log('debug', `destroyed ${this.id}`)
 	}
 
-	
 	async configUpdated(config: any) {
 		this.config = config
 		this.init_tcp()
@@ -82,7 +98,7 @@ class ModuleInstance extends InstanceBase<typeof configFields> {
 		return configFields
 	}
 
-	updateActions = ()=> {
+	updateActions = () => {
 		UpdateActions(this)
 	}
 
@@ -94,77 +110,43 @@ class ModuleInstance extends InstanceBase<typeof configFields> {
 		UpdateVariableDefinitions(this)
 	}
 
-	/**
-	 * Creates the configuration fields for web config.
-	 *
-	 * @returns {Array} the config fields
-	 * @access public
-	 * @since 1.0.0
-	 */
-	config_fields() {
-		return [
-			{
-				type: 'text',
-				id: 'info',
-				width: 12,
-				label: 'Information',
-				value: 'This module is for the Allen & Heath Avantis mixer',
-			},
-			{
-				type: 'textinput',
-				id: 'host',
-				label: 'Target IP',
-				width: 6,
-				default: '192.168.1.70',
-			},
-			{
-				type: 'number',
-				label: 'MIDI Base Channel',
-				id: 'midiBase',
-				tooltip: 'The base channel selected in Utility / Control / MIDI and cannot exceed 12',
-				min: 1,
-				max: 12,
-				default: 1,
-				step: 1,
-				required: true,
-				range: false,
-			},
-		]
-	}
-
-
 	init_tcp = async () => {
-
 		const self = this
 
 		if (this.tcpSocket !== undefined) {
-			this.tcpSocket.destroy();
-			delete this.tcpSocket;
+			this.tcpSocket.destroy()
+			delete this.tcpSocket
 		}
 
 		if (this.config.host) {
+			this.updateStatus(InstanceStatus.Connecting)
+
 			this.tcpSocket = new net.Socket().connect({
 				host: this.config.host,
-				port: PORT
-			});
-
-			this.tcpSocket.on('status_change', (status: any, message: any) => {
-				this.updateStatus(status, message);
-			});
+				port: PORT,
+			})
 
 			this.tcpSocket.on('error', (err: { message: string }) => {
-				self.log('error', 'TCP error: ' + err.message);
-			});
+				self.updateStatus(InstanceStatus.ConnectionFailure, err.message)
+				self.log('error', 'TCP error: ' + err.message)
+			})
 
 			this.tcpSocket.on('connect', () => {
-				self.log('debug', `TCP Connected to ${this.config.host}`);
-			});
-			
-			this.tcpSocket.on('data', (data: any) => {
-				self.validateResponseData(data);
+				self.updateStatus(InstanceStatus.Ok)
+				self.log('debug', `TCP Connected to ${this.config.host}`)
 			})
-		}
 
+			this.tcpSocket.on('close', () => {
+				self.updateStatus(InstanceStatus.Disconnected)
+				self.log('debug', 'TCP connection closed')
+			})
+
+			this.tcpSocket.on('data', (data: any) => {
+				self.validateResponseData(data)
+			})
+		} else {
+			this.updateStatus(InstanceStatus.BadConfig, 'No host configured')
+		}
 	}
 
 	updateVariables() {
@@ -236,7 +218,7 @@ class ModuleInstance extends InstanceBase<typeof configFields> {
 	 * @access public
 	 * @since 1.0.0
 	 */
-	action = (action: { action: string; options: any; }) => {
+	action = (action: { action: string; options: any }) => {
 		console.log('action execute:')
 
 		var opt = action.options
@@ -362,9 +344,41 @@ class ModuleInstance extends InstanceBase<typeof configFields> {
 				bufferCommands = this.buildSendLevelCommand(opt, midiBase, 0, 4)
 				break
 
-			// MIDI Transport
-			// MIDI Strips
-			// SoftKeys
+			// MIDI Transport Control
+			case 'transport_stop':
+			case 'transport_play':
+			case 'transport_record':
+			case 'transport_rewind':
+			case 'transport_forward':
+			case 'transport_pause':
+				bufferCommands = this.buildTransportCommand(opt, midiBase)
+				break
+
+			// Fade Fader
+			case 'fade_fader_input':
+				this.startFade(opt, midiBase, 'input')
+				return // Don't send commands immediately, fade handles it
+
+			case 'fade_fader_mono_group':
+			case 'fade_fader_stereo_group':
+				this.startFade(opt, midiBase + 1, 'group')
+				return
+
+			case 'fade_fader_mono_aux':
+			case 'fade_fader_stereo_aux':
+				this.startFade(opt, midiBase + 2, 'aux')
+				return
+
+			case 'fade_fader_mono_matrix':
+			case 'fade_fader_stereo_matrix':
+				this.startFade(opt, midiBase + 3, 'matrix')
+				return
+
+			case 'fade_fader_master':
+			case 'fade_fader_dca':
+			case 'fade_fader_fx':
+				this.startFade(opt, midiBase + 4, 'master')
+				return
 		}
 
 		console.log(bufferCommands)
@@ -406,7 +420,11 @@ class ModuleInstance extends InstanceBase<typeof configFields> {
 		]
 	}
 
-	buildAssignCommands(opt: { dcaGroup: any; muteGroup: any; assign: any; channel: number }, midiOffset: number, isDca: boolean) {
+	buildAssignCommands(
+		opt: { dcaGroup: any; muteGroup: any; assign: any; channel: number },
+		midiOffset: number,
+		isDca: boolean,
+	) {
 		let routingCmds: Buffer[] = []
 		let groups = isDca ? opt.dcaGroup : opt.muteGroup
 		let offset = 0
@@ -497,7 +515,12 @@ class ModuleInstance extends InstanceBase<typeof configFields> {
 		return [Buffer.from([...SysExHeader, 0x00 + midiOffset, 0x06, parseInt(opt.channel), parseInt(opt.color), 0xf7])]
 	}
 
-	buildSendLevelCommand(opt: { srcChannel: string; destChannel: number; level: string }, baseMidi: number, srcMidiChnl: number, destMidiChnl: number) {
+	buildSendLevelCommand(
+		opt: { srcChannel: string; destChannel: number; level: string },
+		baseMidi: number,
+		srcMidiChnl: number,
+		destMidiChnl: number,
+	) {
 		// SysEx Header, 0N, 0D, CH, SndN, SndCH, LV, F7
 		return [
 			Buffer.from([
@@ -513,7 +536,12 @@ class ModuleInstance extends InstanceBase<typeof configFields> {
 		]
 	}
 
-	buildSendLevelNumberCommand(opt: { level: string | number; srcChannel: string; destChannel: number }, baseMidi: number, srcMidiChnl: number, destMidiChnl: number) {
+	buildSendLevelNumberCommand(
+		opt: { level: string | number; srcChannel: string; destChannel: number },
+		baseMidi: number,
+		srcMidiChnl: number,
+		destMidiChnl: number,
+	) {
 		const levelMap = [
 			['0', '0x6B'],
 			['-1', '0x69'],
@@ -557,9 +585,98 @@ class ModuleInstance extends InstanceBase<typeof configFields> {
 		]
 	}
 
+	buildTransportCommand(opt: { command: string }, midiOffset: number) {
+		// MMC SysEx: F0, 7F, 7F, 06, TC, F7
+		const transportCodes: { [key: string]: number } = {
+			stop: 0x01,
+			play: 0x02,
+			forward: 0x04,
+			rewind: 0x05,
+			record: 0x06,
+			pause: 0x09,
+		}
+
+		const tc = transportCodes[opt.command] || 0x01
+		return [Buffer.from([0xf0, 0x7f, 0x7f, 0x06, tc, 0xf7])]
+	}
+
+	startFade(
+		opt: { channel: number; targetLevel: number; duration: number; currentLevel?: number },
+		midiOffset: number,
+		type: string,
+	) {
+		const fadeKey = `${type}_${opt.channel}_${midiOffset}`
+
+		// Stop existing fade for this channel if any
+		const existingFade = this.fadeTimers.get(fadeKey)
+		if (existingFade) {
+			clearInterval(existingFade.interval)
+			this.fadeTimers.delete(fadeKey)
+		}
+
+		// Get current level or use provided one
+		const currentLevel = opt.currentLevel !== undefined ? opt.currentLevel : 0
+		const targetLevel = opt.targetLevel
+		const duration = opt.duration * 1000 // Convert to milliseconds
+
+		// Calculate steps (update every 50ms for smooth fade)
+		const updateInterval = 50
+		const totalSteps = Math.max(1, Math.floor(duration / updateInterval))
+		const levelDiff = targetLevel - currentLevel
+		const step = levelDiff / totalSteps
+
+		let currentStep = 0
+		let currentFadeLevel = currentLevel
+
+		const interval = setInterval(() => {
+			currentStep++
+			currentFadeLevel += step
+
+			// Clamp to valid range (0-127)
+			const level = Math.max(0, Math.min(127, Math.round(currentFadeLevel)))
+
+			// Send fader command
+			const command = Buffer.from([
+				0xb0 + midiOffset,
+				0x63,
+				opt.channel,
+				0xb0 + midiOffset,
+				0x62,
+				0x17,
+				0xb0 + midiOffset,
+				0x06,
+				level,
+			])
+
+			if (this.tcpSocket) {
+				this.tcpSocket.write(command)
+				this.log('debug', `Fade step ${currentStep}/${totalSteps}: Channel ${opt.channel} -> Level ${level}`)
+			}
+
+			// Check if fade is complete
+			if (currentStep >= totalSteps) {
+				clearInterval(interval)
+				this.fadeTimers.delete(fadeKey)
+				this.log('debug', `Fade complete for ${fadeKey}`)
+			}
+		}, updateInterval)
+
+		// Store the fade timer
+		this.fadeTimers.set(fadeKey, {
+			interval,
+			channel: opt.channel,
+			midiOffset,
+			currentLevel: currentFadeLevel,
+			targetLevel,
+			step,
+		})
+
+		this.log('debug', `Started fade for ${fadeKey}: ${currentLevel} -> ${targetLevel} over ${duration}ms`)
+	}
+
 	dumpData(opt: any, midiBase: number, bufferCommands: any[]) {
 		console.log(`dumpData: ${JSON.stringify(opt, null, 2)} ${midiBase} ${bufferCommands}`)
 	}
 }
 
-runEntrypoint(ModuleInstance, [EmptyUpgradeScript])
+runEntrypoint(ModuleInstance, UpgradeScripts)

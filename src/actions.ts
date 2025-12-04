@@ -1,11 +1,16 @@
-// @ts-nocheck
-
 import fader from './fader.json'
 import avantisConfig from './avantisconfig.json'
-import { CompanionActionDefinition, CompanionActionDefinitions } from '@companion-module/base'
+import {
+	CompanionActionDefinitions,
+	CompanionActionDefinition,
+	CompanionActionEvent,
+	CompanionActionContext,
+} from '@companion-module/base'
+
+type ModuleInstance = any
 
 // update actions
-export default function (self: any) {
+export default function (self: ModuleInstance) {
 	self.getActions = () => {
 		self.log('debug', 'getActions')
 
@@ -98,7 +103,7 @@ export default function (self: any) {
 						default: true,
 					},
 				],
-				callback: (action, context) => {
+				callback: (action: CompanionActionEvent) => {
 					self.action({
 						action: action.actionId,
 						options: action.options,
@@ -128,7 +133,7 @@ export default function (self: any) {
 						minChoicesForSearch: 0,
 					},
 				],
-				callback: (action, context) => {
+				callback: (action: CompanionActionEvent) => {
 					self.action({
 						action: action.actionId,
 						options: action.options,
@@ -167,7 +172,7 @@ export default function (self: any) {
 						minChoicesForSearch: 0,
 					},
 				],
-				callback: (action, context) => {
+				callback: (action: CompanionActionEvent) => {
 					self.action({
 						action: action.actionId,
 						options: action.options,
@@ -205,7 +210,7 @@ export default function (self: any) {
 						step: 1,
 					},
 				],
-				callback: (action, context) => {
+				callback: (action: CompanionActionEvent) => {
 					self.action({
 						action: action.actionId,
 						options: action.options,
@@ -241,7 +246,7 @@ export default function (self: any) {
 						default: true,
 					},
 				],
-				callback: (action: any, context: any) => {
+				callback: (action: CompanionActionEvent) => {
 					self.action({
 						action: action.actionId,
 						options: action.options,
@@ -344,7 +349,7 @@ export default function (self: any) {
 					tooltip: 'In this option you can enter whatever you want as long as it is the number one',
 				},
 			],
-			callback: (action, context) => {
+			callback: (action: CompanionActionEvent) => {
 				self.action({
 					action: action.actionId,
 					options: action.options,
@@ -372,7 +377,7 @@ export default function (self: any) {
 					minChoicesForSearch: 0,
 				},
 			],
-			callback: (action, context) => {
+			callback: (action: CompanionActionEvent) => {
 				self.action({
 					action: action.actionId,
 					options: action.options,
@@ -392,7 +397,7 @@ export default function (self: any) {
 					minChoicesForSearch: 0,
 				},
 			],
-			callback: (action, context) => {
+			callback: (action: CompanionActionEvent) => {
 				self.action({
 					action: action.actionId,
 					options: action.options,
@@ -476,13 +481,189 @@ export default function (self: any) {
 					minChoicesForSearch: 0,
 				},
 			],
-			callback: (action, context) => {
+			callback: (action: CompanionActionEvent) => {
 				self.action({
 					action: action.actionId,
 					options: action.options,
 				})
 			},
 		}
+
+		// -----------------------
+		// MIDI TRANSPORT CONTROL
+		// -----------------------
+
+		actions['transport_stop'] = {
+			name: 'Transport: Stop',
+			options: [
+				{
+					type: 'static-text',
+					id: 'info',
+					label: 'MIDI Machine Control',
+					value: 'Sends MMC Stop command',
+				},
+			],
+			callback: (action: CompanionActionEvent) => {
+				self.action({
+					action: action.actionId,
+					options: { command: 'stop' },
+				})
+			},
+		}
+
+		actions['transport_play'] = {
+			name: 'Transport: Play',
+			options: [
+				{
+					type: 'static-text',
+					id: 'info',
+					label: 'MIDI Machine Control',
+					value: 'Sends MMC Play command',
+				},
+			],
+			callback: (action: CompanionActionEvent) => {
+				self.action({
+					action: action.actionId,
+					options: { command: 'play' },
+				})
+			},
+		}
+
+		actions['transport_record'] = {
+			name: 'Transport: Record',
+			options: [
+				{
+					type: 'static-text',
+					id: 'info',
+					label: 'MIDI Machine Control',
+					value: 'Sends MMC Record command',
+				},
+			],
+			callback: (action: CompanionActionEvent) => {
+				self.action({
+					action: action.actionId,
+					options: { command: 'record' },
+				})
+			},
+		}
+
+		actions['transport_rewind'] = {
+			name: 'Transport: Rewind',
+			options: [
+				{
+					type: 'static-text',
+					id: 'info',
+					label: 'MIDI Machine Control',
+					value: 'Sends MMC Rewind command',
+				},
+			],
+			callback: (action: CompanionActionEvent) => {
+				self.action({
+					action: action.actionId,
+					options: { command: 'rewind' },
+				})
+			},
+		}
+
+		actions['transport_forward'] = {
+			name: 'Transport: Fast Forward',
+			options: [
+				{
+					type: 'static-text',
+					id: 'info',
+					label: 'MIDI Machine Control',
+					value: 'Sends MMC Fast Forward command',
+				},
+			],
+			callback: (action: CompanionActionEvent) => {
+				self.action({
+					action: action.actionId,
+					options: { command: 'forward' },
+				})
+			},
+		}
+
+		actions['transport_pause'] = {
+			name: 'Transport: Pause',
+			options: [
+				{
+					type: 'static-text',
+					id: 'info',
+					label: 'MIDI Machine Control',
+					value: 'Sends MMC Pause command',
+				},
+			],
+			callback: (action: CompanionActionEvent) => {
+				self.action({
+					action: action.actionId,
+					options: { command: 'pause' },
+				})
+			},
+		}
+
+		// -----------------------
+		// FADE FADER ACTIONS
+		// -----------------------
+
+		self.fadeActionBuilder = (label, choice) => {
+			return {
+				name: label,
+				options: [
+					{
+						type: 'dropdown',
+						label: choice.name,
+						id: 'channel',
+						default: 1 + choice.offset,
+						choices: choice.values,
+						minChoicesForSearch: 0,
+					},
+					{
+						type: 'number',
+						label: 'Current Level (0-127, optional)',
+						id: 'currentLevel',
+						min: 0,
+						max: 127,
+						default: 0,
+						tooltip: 'Leave at 0 to start from current position',
+					},
+					{
+						type: 'dropdown',
+						label: 'Target Level',
+						id: 'targetLevel',
+						default: 107,
+						choices: self.CHOICES_FADER.values,
+						minChoicesForSearch: 0,
+					},
+					{
+						type: 'number',
+						label: 'Duration (seconds)',
+						id: 'duration',
+						min: 0.1,
+						max: 60,
+						default: 2,
+						step: 0.1,
+						tooltip: 'How long the fade should take',
+					},
+				],
+				callback: (action: CompanionActionEvent) => {
+					self.action({
+						action: action.actionId,
+						options: action.options,
+					})
+				},
+			}
+		}
+
+		actions['fade_fader_input'] = self.fadeActionBuilder('Fade Input Fader', self.CHOICES_INPUT_CHANNEL)
+		actions['fade_fader_mono_group'] = self.fadeActionBuilder('Fade Mono Group Fader', self.CHOICES_MONO_GROUP)
+		actions['fade_fader_stereo_group'] = self.fadeActionBuilder('Fade Stereo Group Fader', self.CHOICES_STEREO_GROUP)
+		actions['fade_fader_mono_aux'] = self.fadeActionBuilder('Fade Mono Aux Fader', self.CHOICES_MONO_AUX)
+		actions['fade_fader_stereo_aux'] = self.fadeActionBuilder('Fade Stereo Aux Fader', self.CHOICES_STEREO_AUX)
+		actions['fade_fader_mono_matrix'] = self.fadeActionBuilder('Fade Mono Matrix Fader', self.CHOICES_MONO_MATRIX)
+		actions['fade_fader_stereo_matrix'] = self.fadeActionBuilder('Fade Stereo Matrix Fader', self.CHOICES_STEREO_MATRIX)
+		actions['fade_fader_master'] = self.fadeActionBuilder('Fade Main Master Fader', self.CHOICES_MAIN_MIX)
+		actions['fade_fader_dca'] = self.fadeActionBuilder('Fade DCA Fader', self.CHOICES_DCA)
+		actions['fade_fader_fx'] = self.fadeActionBuilder('Fade FX Return Fader', self.CHOICES_FX_RETURN)
 
 		self.log('debug', Object.keys(actions))
 
